@@ -1,0 +1,24 @@
+{
+  "_format": "hh-vyper-artifact-1",
+  "contractName": "Test",
+  "sourceName": "contracts/Margin/Test.vy",
+  "abi": [
+    {
+      "name": "hello",
+      "outputs": [
+        {
+          "type": "uint256",
+          "name": ""
+        }
+      ],
+      "inputs": [],
+      "stateMutability": "view",
+      "type": "function",
+      "gas": 261
+    }
+  ],
+  "bytecode": "0x61004456341561000a57600080fd5b60043610156100185761003a565b600035601c526319ff1d21600051141561003957600160005260206000f350005b5b60006000fd5b61000461004403610004600039610004610044036000f3",
+  "deployedBytecode": "0x341561000a57600080fd5b60043610156100185761003a565b600035601c526319ff1d21600051141561003957600160005260206000f350005b5b60006000fd",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
