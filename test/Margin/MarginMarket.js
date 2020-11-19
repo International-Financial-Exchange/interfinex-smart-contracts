@@ -20,7 +20,7 @@ describe("MarginMarket contract", function() {
         [token0, token1, token3, token4] = await Promise.all(
             new Array(4).fill().map(async (_, i) => {
                 const tokenContract = await ERC20.deploy();
-                await tokenContract.initializeERC20(`token${i}`, `${i}`, 18, parseEther("210"), true);
+                await tokenContract.initializeERC20(`token${i}`, `${i}`, 18, 2100000000, true);
                 return tokenContract;
             })
         );
@@ -29,7 +29,7 @@ describe("MarginMarket contract", function() {
         templateDividendERC20Contract = await DividendERC20.deploy();
 
         ifexTokenContract = await DividendERC20.deploy();
-        await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, parseEther("2100000000"), ifexTokenContract.address, false);
+        await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, 2100000000, ifexTokenContract.address, false);
 
         SwapExchange = await ethers.getContractFactory("Exchange");
         templateSwapExchangeContract = await SwapExchange.deploy();
@@ -74,9 +74,27 @@ describe("MarginMarket contract", function() {
         await token0.approve(marginMarketContract.address, ethers.constants.MaxUint256);
         await token1.approve(marginMarketContract.address, ethers.constants.MaxUint256);
 
+        await token0.transfer(addr1.address, parseEther("100"));
+        await token1.transfer(addr1.address, parseEther("100"));
+        await token0.transfer(addr2.address, parseEther("100"));
+        await token1.transfer(addr2.address, parseEther("100"));
+        await token0.transfer(addr3.address, parseEther("100"));
+        await token1.transfer(addr3.address, parseEther("100"));
+
+        await token0.connect(addr1).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+        await token1.connect(addr1).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+        await token0.connect(addr2).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+        await token1.connect(addr2).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+        await token0.connect(addr3).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+        await token1.connect(addr3).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+
         await marginMarketContract.initialize(token0.address, token1.address, templateDividendERC20Contract.address, ifexTokenContract.address, swapFactoryContract.address);
         liquidityTokenContract = await ethers.getContractAt("DividendERC20", await marginMarketContract.liquidityToken());
         liquidityTokenContract.approve(marginMarketContract.address, ethers.constants.MaxUint256);
+
+        await liquidityTokenContract.connect(addr1).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+        await liquidityTokenContract.connect(addr2).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+        await liquidityTokenContract.connect(addr3).approve(marginMarketContract.address, ethers.constants.MaxUint256);
     });
 
     it("Should initialize margin market", async function() {
@@ -117,10 +135,11 @@ describe("MarginMarket contract", function() {
             const depositAmount = parseEther("1"); // Asset token
             await marginMarketContract.deposit(depositAmount);
     
-            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"));
+            const tx = await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"));
+            const res = await tx.wait();
     
             const position = await marginMarketContract.account_to_position(addr0.address);
-            expect(position.maintenanceMargin).to.equal(parseEther((1.5 * 0.15).toString()).add("20"));
+            expect(position.maintenanceMargin).to.equal(parseEther((0.5 * 0.15).toString()));
             expect(position.borrowedAmount).to.equal(parseEther("0.5"));
     
             const totalBorrowed = await marginMarketContract.totalBorrowed();
@@ -219,13 +238,14 @@ describe("MarginMarket contract", function() {
                     .add(positionBefore.borrowedAmount)
                     .add(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()))
                     .add(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()))
+                    .add(1)
             );
     
             expect(await token0.balanceOf(addr0.address)).to.equal(
                 accountBalanceBefore
                     .add(boughtAssetTokens.sub(positionBefore.borrowedAmount))
                     .add(positionBefore.maintenanceMargin)
-                    .sub(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()))
+                    .sub(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()).add(1))
                     .sub(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()))
             );
         });
@@ -261,41 +281,56 @@ describe("MarginMarket contract", function() {
             const position = await marginMarketContract.account_to_position(addr0.address);
             
             await swapMarketContract.getInputToOutputAmount(token1.address, position.collateralAmount);
-            await swapMarketContract.swap(token1.address, parseEther("0.16"), addr0.address, 0, 0, 0, ethers.constants.AddressZero);
+            await swapMarketContract.swap(token1.address, parseEther("0.17"), addr0.address, 0, 0, 0, ethers.constants.AddressZero);
             const liquidationAmount = await swapMarketContract.getInputToOutputAmount(token1.address, position.collateralAmount);
 
-            await marginMarketContract.testAccrueInterest();
+            await ethers.provider.send("evm_mine");
             const positionAfter = await marginMarketContract.getPosition(addr0.address);
             const interestRate = await marginMarketContract.interestRate();
-            const borrowedAmount = positionAfter.borrowedAmount.add(positionAfter.borrowedAmount.mul(interestRate).div(ONE))
+            const borrowedAmount = positionAfter.borrowedAmount;
 
             const reservesBefore = await marginMarketContract.totalReserved();
 
-            expect(liquidationAmount).to.be.lt(borrowedAmount);
-            expect(liquidationAmount.add(position.maintenanceMargin)).to.be.gt(borrowedAmount);
+            expect(positionAfter.borrowedAmount).to.be.equal(
+                position.borrowedAmount
+                    .add(position.borrowedAmount.mul(interestRate).div(ONE))
+                    .add(position.borrowedAmount.mul(interestRate).div(ONE))
+            );
+
+            const newBorrowAmount = position.borrowedAmount
+                .add(position.borrowedAmount.mul(interestRate).div(ONE))
+                .add(position.borrowedAmount.mul(interestRate).div(ONE))
+                .add(position.borrowedAmount.mul(interestRate).div(ONE));
+            
+            expect(liquidationAmount).to.be.lt(newBorrowAmount);
+            expect(liquidationAmount.add(position.maintenanceMargin)).to.be.gt(newBorrowAmount);
 
             const ifexBalanceBefore = await ifexTokenContract.balanceOf(ifexTokenContract.address);
 
+            const addr1BalanceBefore = await token0.balanceOf(addr1.address);
             await marginMarketContract.connect(addr1).liquidatePosition(addr0.address);
 
             expect(await marginMarketContract.totalReserved()).to.equal(
                 reservesBefore
                     .add(
-                        borrowedAmount
+                        newBorrowAmount
                             .add(
                                 positionAfter.maintenanceMargin.sub(
-                                    borrowedAmount.sub(liquidationAmount)
+                                    newBorrowAmount.sub(liquidationAmount)
                                 ).mul("50").div("100")
                             )
                     )
+                    .add(1)
             );
 
             expect(await marginMarketContract.totalBorrowed()).to.equal(0);
             expect(await token0.balanceOf(marginMarketContract.address)).to.equal((await marginMarketContract.totalReserved()).add("1"));
             expect(await token0.balanceOf(addr1.address)).to.equal(
-                positionAfter.maintenanceMargin.sub(
-                    borrowedAmount.sub(liquidationAmount)
-                ).mul("3").div("100")
+                addr1BalanceBefore.add(
+                    positionAfter.maintenanceMargin.sub(
+                        newBorrowAmount.sub(liquidationAmount)
+                    ).mul("3").div("100")
+                )
             );
             expect(await ifexTokenContract.balanceOf(ifexTokenContract.address)).to.be.gt(ifexBalanceBefore);
         });
@@ -442,10 +477,264 @@ describe("MarginMarket contract", function() {
     });
 
     describe("Integration", function() {
+        it("Should trade correctly", async function() {
+            // Deposit from 3 accounts
+            let addr0Deposit = parseEther("1");
+            await marginMarketContract.connect(addr0).deposit(addr0Deposit);
+            let addr1Deposit = parseEther("0.5");
+            await marginMarketContract.connect(addr1).deposit(addr1Deposit);
+            let addr2Deposit = parseEther("1.5");
+            await marginMarketContract.connect(addr2).deposit(addr2Deposit);
 
+            expect(await token0.balanceOf(marginMarketContract.address)).to.be.equal(addr0Deposit.add(addr1Deposit).add(addr2Deposit));
+            expect(
+                (await liquidityTokenContract.balanceOf(addr0.address))
+                    .mul(ONE)
+                    .div(await liquidityTokenContract.totalSupply())
+            ).to.be.equal(
+                addr0Deposit
+                    .mul(ONE)
+                    .div(addr0Deposit.add(addr1Deposit).add(addr2Deposit))
+            );
+
+            expect(
+                (await liquidityTokenContract.balanceOf(addr1.address))
+                    .mul(ONE)
+                    .div(await liquidityTokenContract.totalSupply())
+            ).to.be.equal(
+                addr1Deposit
+                    .mul(ONE)
+                    .div(addr0Deposit.add(addr1Deposit).add(addr2Deposit))
+            );
+
+            expect(
+                (await liquidityTokenContract.balanceOf(addr2.address))
+                    .mul(ONE)
+                    .div(await liquidityTokenContract.totalSupply())
+            ).to.be.equal(
+                addr2Deposit
+                    .mul(ONE)
+                    .div(addr0Deposit.add(addr1Deposit).add(addr2Deposit))
+            );
+
+            expect(await marginMarketContract.totalReserved()).to.be.equal(addr0Deposit.add(addr1Deposit).add(addr2Deposit));
+
+            // Withdraw partially from 2 accounts
+            let addr1BalanceBefore = await token0.balanceOf(addr1.address);
+            await marginMarketContract.connect(addr1).withdraw((await liquidityTokenContract.balanceOf(addr1.address)).div(2));
+            expect(await token0.balanceOf(addr1.address)).to.be.equal(addr1BalanceBefore.add(addr1Deposit.div("2")));
+            expect(await marginMarketContract.totalReserved()).to.be.equal(await token0.balanceOf(marginMarketContract.address));
+            addr1Deposit = addr1Deposit.div("2");
+
+            let addr2BalanceBefore = await token0.balanceOf(addr2.address);
+            await marginMarketContract.connect(addr2).withdraw((await liquidityTokenContract.balanceOf(addr2.address)).div(2));
+            expect(await token0.balanceOf(addr2.address)).to.be.equal(addr2BalanceBefore.add(addr2Deposit.div("2")));
+            expect(await marginMarketContract.totalReserved()).to.be.equal(await token0.balanceOf(marginMarketContract.address));
+            addr2Deposit = addr2Deposit.div("2");
+            
+            // Enter position from 2 accounts
+            let [initialAddr3Margin, initialAddr3BorrowAmount] = [parseEther("0.05"), parseEther("0.1")];
+            await expect(marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount)).to.be.revertedWith("Insufficient initial margin");
+            
+            initialAddr3Margin = initialAddr3BorrowAmount
+                .mul("50")
+                .div("100")
+                .add(
+                    initialAddr3BorrowAmount
+                        .mul("14")
+                        .div("100")    
+                );
+
+            await expect(marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount)).to.be.revertedWith("Insufficient initial margin");
+            
+            initialAddr3Margin = initialAddr3BorrowAmount
+                .mul("50")
+                .div("100")
+                .add(
+                    initialAddr3BorrowAmount
+                        .mul("16")
+                        .div("100")    
+                );
+
+            let totalReservedBefore = await marginMarketContract.totalReserved();
+            let addr3CollateralBought = await swapMarketContract.getInputToOutputAmount(
+                token0.address, 
+                initialAddr3BorrowAmount.add(initialAddr3Margin.sub(initialAddr3BorrowAmount.mul("15").div("100"))),
+            );
+            await marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount);
+
+            
+            const addr3Position = await marginMarketContract.getPosition(addr3.address);
+            expect(addr3Position.maintenanceMargin).to.be.equal(
+                initialAddr3BorrowAmount
+                    .mul("15")
+                    .div("100")
+            );
+
+            expect(await marginMarketContract.interestRate()).to.be.equal(
+                initialAddr3BorrowAmount
+                    .mul(ONE)
+                    .div((await marginMarketContract.totalReserved()).add(await marginMarketContract.totalBorrowed()))
+                    .mul(await marginMarketContract.interestMultiplier())
+                    .div(ONE)
+                    .pow("2")
+                    .div(ONE)
+            );
+
+            expect(addr3Position.borrowedAmount).to.be.equal(initialAddr3BorrowAmount);
+            expect(addr3Position.collateralAmount).to.be.equal(addr3CollateralBought);
+
+            let [initialAddr2Margin, initialAddr2BorrowAmount] = [parseEther("0.05"), parseEther("0.1")];
+            initialAddr2Margin = initialAddr2BorrowAmount
+                .mul("50")
+                .div("100")
+                .add(
+                    initialAddr3BorrowAmount
+                        .mul("16")
+                        .div("100")    
+                );
+
+            let interestRate = await marginMarketContract.interestRate();
+            await marginMarketContract.connect(addr2).increasePosition(initialAddr2Margin, initialAddr2BorrowAmount);
+
+            expect(await marginMarketContract.totalReserved()).to.be.equal(
+                totalReservedBefore.sub(
+                    initialAddr2BorrowAmount.add(initialAddr3BorrowAmount)
+                )
+            );
+            expect(await marginMarketContract.totalBorrowed()).to.be.equal(
+                initialAddr2BorrowAmount
+                    .add(
+                        initialAddr3BorrowAmount
+                            .add(initialAddr3BorrowAmount.mul(interestRate).div(ONE))
+                    )
+            );
+
+            expect(await marginMarketContract.interestRate()).to.be.equal(
+                initialAddr2BorrowAmount
+                    .add(
+                        initialAddr3BorrowAmount
+                            .add(initialAddr3BorrowAmount.mul(interestRate).div(ONE))
+                    )
+                    .mul(ONE)
+                    .div((await marginMarketContract.totalReserved()).add(await marginMarketContract.totalBorrowed()))
+                    .mul(await marginMarketContract.interestMultiplier())
+                    .div(ONE)
+                    .pow("2")
+                    .div(ONE)
+            );
+
+            // Reduce position from 1 account without a complete exit
+            let position3Before = await marginMarketContract.getPosition(addr3.address);
+            let collateralAmount = position3Before.collateralAmount.div("50");
+            let assetAmountBought = await swapMarketContract.getInputToOutputAmount(token1.address, collateralAmount);
+            let interestRateBefore = await marginMarketContract.interestRate();
+            totalReservedBefore = await marginMarketContract.totalReserved();
+            await marginMarketContract.connect(addr3).decreasePosition(collateralAmount);
+            
+            let position3After = await marginMarketContract.getPosition(addr3.address);
+            expect(position3After.collateralAmount).to.be.equal(position3Before.collateralAmount.sub(collateralAmount));
+            expect(position3After.borrowedAmount).to.be.equal(
+                position3Before.borrowedAmount
+                    .add(position3Before.borrowedAmount.mul(interestRateBefore).div(ONE))
+                    .sub(assetAmountBought)
+                    .add(1)
+            );
+            expect(await marginMarketContract.totalReserved()).to.be.equal(totalReservedBefore.add(assetAmountBought));
+
+            // Close position from 1 account
+            position3Before = await marginMarketContract.getPosition(addr3.address);
+            addr3BalanceBefore = await token0.balanceOf(addr3.address);
+            assetAmountBought = await swapMarketContract.getInputToOutputAmount(token1.address, position3Before.collateralAmount);
+            totalReservedBefore = await marginMarketContract.totalReserved();
+            interestRateBefore = await marginMarketContract.interestRate();
+
+            await marginMarketContract.connect(addr3).closePosition(); 
+
+            position3After = await marginMarketContract.getPosition(addr3.address);
+
+            expect(position3After.collateralAmount).to.be.equal(0);
+            expect(position3After.maintenanceMargin).to.be.equal(0);
+            expect(position3After.borrowedAmount).to.be.equal(0);
+            expect(await marginMarketContract.totalReserved()).to.be.equal(
+                totalReservedBefore.add(
+                    position3Before.borrowedAmount.add(position3Before.borrowedAmount.mul(interestRateBefore).div(ONE).add(1))
+                )
+            );
+            expect(await token0.balanceOf(marginMarketContract.address)).to.be.equal(
+                (await marginMarketContract.totalReserved())
+                    .add((await marginMarketContract.getPosition(addr2.address)).maintenanceMargin)
+            );
+            expect(await token0.balanceOf(addr3.address)).to.be.equal(
+                addr3BalanceBefore
+                    .add(
+                        assetAmountBought.sub(
+                            position3Before.borrowedAmount
+                                .add(position3Before.borrowedAmount.mul(interestRateBefore).div(ONE).add(1)) 
+                        )
+                    )
+                    .add(
+                        position3Before.maintenanceMargin
+                    )
+            );
+            
+            // Withdraw from all accounts
+            let liquidityBalanceBefore = await liquidityTokenContract.balanceOf(addr0.address);
+            let liquidityTotalSupplyBefore = await liquidityTokenContract.totalSupply();
+            let assetBalanceBefore = await token0.balanceOf(addr0.address);
+            interestRateBefore = await marginMarketContract.interestRate();
+            totalReservedBefore = await marginMarketContract.totalReserved();
+            let totalBorrowedBefore = await marginMarketContract.totalBorrowed();
+
+            let liquidityWithdrawAmount = liquidityBalanceBefore.div("2");
+
+            await marginMarketContract.connect(addr0).withdraw(liquidityWithdrawAmount);
+
+            expect(await marginMarketContract.totalReserved()).to.be.equal(
+                totalReservedBefore
+                    .sub(
+                        totalReservedBefore
+                            .add(totalBorrowedBefore.add(
+                                totalBorrowedBefore.mul(interestRateBefore).div(ONE)
+                            ))
+                            .mul(liquidityWithdrawAmount)
+                            .div(liquidityTotalSupplyBefore)
+                    )
+            );
+            expect(await token0.balanceOf(addr0.address)).to.be.equal(
+                assetBalanceBefore.add(
+                    totalReservedBefore
+                        .add(totalBorrowedBefore.add(
+                            totalBorrowedBefore.mul(interestRateBefore).div(ONE)
+                        ))
+                        .mul(liquidityWithdrawAmount)
+                        .div(liquidityTotalSupplyBefore)
+                )
+            );
+
+            await marginMarketContract.connect(addr2).closePosition();
+
+            await marginMarketContract.connect(addr0).withdraw(liquidityWithdrawAmount);
+            await marginMarketContract.connect(addr1).withdraw(await liquidityTokenContract.balanceOf(addr1.address));
+
+            await marginMarketContract.connect(addr2).withdraw((await liquidityTokenContract.balanceOf(addr2.address)));
+
+            expect(await token0.balanceOf(marginMarketContract.address)).to.be.equal(0);
+            expect(await marginMarketContract.totalReserved()).to.be.equal(0);
+            expect(await marginMarketContract.totalBorrowed()).to.be.equal(0);
+            expect(await marginMarketContract.interestRate()).to.be.equal(0);
+        });
+
+        // it("Should vote correctly", function() {
+
+        // });
+
+        // it("Should trade and vote correctly", function() {
+
+        // });
     });
 
-    describe("Invalid inputs", function() {
+    describe("Security", function() {
 
     });
 });

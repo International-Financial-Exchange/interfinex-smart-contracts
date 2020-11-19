@@ -83,6 +83,13 @@ def safeTransfer(_token: address, _to: address, _value: uint256) -> bool:
 
     return True
 
+@internal
+@view
+def subOrDefault(a: uint256, b: uint256, defaultValue: uint256) -> uint256:
+    if b > a:
+        return defaultValue
+    return a - b    
+
 # Each user should only be able to call each external function once per block
 
 # Contracts
@@ -145,21 +152,31 @@ def initialize(_assetToken: address, _collateralToken: address, _dividendERC20Te
     ERC20(_collateralToken).approve(self.assetIfexSwapExchange, MAX_UINT256)
     ERC20(_ifexToken).approve(_ifexToken, MAX_UINT256)
     self.maintenanceMarginRate = ONE * 15 / 100 # 15%
-    self.minInitialMarginRate = ONE * 50 / 100 # 50%
+    self.minInitialMarginRate = ONE * 50 / 100 # 50% - Start at 2x leverage
     self.maxBorrowAmount = ONE * 100_000_000_000 # 100 billion - Should take at most a year to normalize
     self.interestMultiplier = ONE
 
 @internal
-def accrueInterest():
+@view
+def _pureAccrueInterest() -> (uint256, uint256):
     blockDelta: uint256 = block.number - self.lastUpdate
-    if blockDelta == 0: # Already at the latest block so no need to update
-        return
+    if blockDelta == 0:
+        return (self.totalBorrowed, self.interestIndex)
 
     accumulatedInterest: uint256 = blockDelta * self.interestRate
     if accumulatedInterest > 0 and self.totalBorrowed > 0: # No need to accumulate if values are 0
-        self.totalBorrowed += self.mulTruncate(self.totalBorrowed, accumulatedInterest)
-        self.interestIndex += self.mulTruncate(self.interestIndex, accumulatedInterest)
+        return (self.totalBorrowed + self.mulTruncate(self.totalBorrowed, accumulatedInterest), self.interestIndex + self.mulTruncate(self.interestIndex, accumulatedInterest))
 
+    return (self.totalBorrowed, self.interestIndex)
+
+@external
+@view
+def pureAccrueInterest() -> (uint256, uint256):
+    return self._pureAccrueInterest()
+
+@internal
+def accrueInterest():
+    self.totalBorrowed, self.interestIndex = self._pureAccrueInterest()
     self.lastUpdate = block.number
 
 @external
@@ -196,18 +213,20 @@ def deposit(_amount: uint256):
     self.updateInterestRate()
 
 @external
-def withdraw(_liquidityTokenAmount: uint256):
+def withdraw(_liquidityTokenAmount: uint256) -> uint256:
+    assert _liquidityTokenAmount > 0, "Withdraw amount must be greater than 0"
     self.accrueInterest()
 
     totalBalance: uint256 = self.totalReserved + self.totalBorrowed
     assetTokenAmount: uint256 = totalBalance * _liquidityTokenAmount / ERC20(self.liquidityToken).totalSupply()
     DividendERC20(self.liquidityToken).burnFrom(msg.sender, _liquidityTokenAmount)
 
-    assert self.totalReserved > assetTokenAmount, "Insufficient reserves to withdraw this amount"
+    assert self.totalReserved >= assetTokenAmount, "Insufficient reserves to withdraw this amount"
     self.totalReserved -= assetTokenAmount
     self.safeTransfer(self.assetToken, msg.sender, assetTokenAmount)
 
     self.updateInterestRate()
+    return assetTokenAmount
 
 @view
 @internal
@@ -223,19 +242,23 @@ def accruePositionInterest(borrowedAmount: uint256, lastInterestIndex: uint256) 
         return 0
 
     multiplier: uint256 = self.interestIndex * ONE / lastInterestIndex
-    return self.mulTruncate(multiplier, borrowedAmount) - borrowedAmount
-
-@internal
-@view
-def _getPosition(account: address) -> Position:
-    position: Position = self.account_to_position[account]
-    position.borrowedAmount += self.accruePositionInterest(position.borrowedAmount, position.lastInterestIndex)
-    return position
+    return (self.mulTruncate(multiplier, borrowedAmount) - borrowedAmount) + 1 # Always round integer division UP
 
 @external
 @view
-def getPosition(account: address) -> Position:
-    return self._getPosition(account)
+def getPosition(account: address) -> Position: 
+    position: Position = self.account_to_position[account]
+
+    tmpInterestIndex: uint256 = 0
+    _: uint256 = 0
+    _, tmpInterestIndex = self._pureAccrueInterest()
+    accruedPositionInterest: uint256 = 0   
+    if position.borrowedAmount != 0 and position.lastInterestIndex != 0:
+        multiplier: uint256 = tmpInterestIndex * ONE / position.lastInterestIndex
+        accruedPositionInterest = self.mulTruncate(multiplier, position.borrowedAmount) - position.borrowedAmount
+
+    position.borrowedAmount += accruedPositionInterest
+    return position
 
 # borrow and margin inputs are both the assetToken type
 @external
@@ -248,10 +271,9 @@ def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256) -> uin
     assert self.totalReserved >= _borrowAmount, "Insufficient reserves to borrow from" 
     self.safeTransferFrom(self.assetToken, msg.sender, self, _totalMarginAmount)
 
-    assetPositionSize: uint256 = _totalMarginAmount + _borrowAmount
-    assetMaintenanceMargin: uint256 = self.mulTruncate(assetPositionSize, self.maintenanceMarginRate)
+    assetMaintenanceMargin: uint256 = self.mulTruncate(_borrowAmount, self.maintenanceMarginRate)
     assetInitialMargin: uint256 = _totalMarginAmount - assetMaintenanceMargin
-    assert assetInitialMargin * ONE / assetPositionSize > self.minInitialMarginRate, "Insufficient initial margin"
+    assert assetInitialMargin * ONE / _borrowAmount > self.minInitialMarginRate, "Insufficient initial margin"
 
     collateralAmount: uint256 = SwapExchange(self.swapExchange).swap(self.assetToken, _borrowAmount + assetInitialMargin, self, 0, 0, 0, ZERO_ADDRESS)
 
@@ -272,32 +294,41 @@ def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256) -> uin
 
     return new_position.collateralAmount
 
-@external
-def decreasePosition(_collateralTokenAmount: uint256):
+@internal
+def _decreasePosition(_collateralTokenAmount: uint256, account: address):
     assert _collateralTokenAmount > 0, "_collateralTokenAmount must be greater than 0"
 
     self.accrueInterest()
 
-    new_position: Position = self.account_to_position[msg.sender]
+    new_position: Position = self.account_to_position[account]
     new_position.borrowedAmount += self.accruePositionInterest(new_position.borrowedAmount, new_position.lastInterestIndex) # Asset token
     new_position.lastInterestIndex = self.interestIndex
 
     assetTokenAmount: uint256 = SwapExchange(self.swapExchange).swap(self.collateralToken, _collateralTokenAmount, self, 0, 0, 0, ZERO_ADDRESS)
     if assetTokenAmount >= new_position.borrowedAmount:
         assetTokenProfit: uint256 = (assetTokenAmount - new_position.borrowedAmount) + new_position.maintenanceMargin
-        self.safeTransfer(self.assetToken, msg.sender, assetTokenProfit)
-        self.safeTransfer(self.collateralToken, msg.sender, new_position.collateralAmount - _collateralTokenAmount)
+        self.safeTransfer(self.assetToken, account, assetTokenProfit)
+        self.safeTransfer(self.collateralToken, account, new_position.collateralAmount - _collateralTokenAmount)
         self.totalReserved += new_position.borrowedAmount
-        self.totalBorrowed -= new_position.borrowedAmount
-        self.account_to_position[msg.sender] = empty(Position)
+        self.totalBorrowed = self.subOrDefault(self.totalBorrowed, new_position.borrowedAmount, 0)
+        self.account_to_position[account] = empty(Position)
     else:
         new_position.collateralAmount -= _collateralTokenAmount
         new_position.borrowedAmount -= assetTokenAmount
-        self.account_to_position[msg.sender] = new_position 
+        self.account_to_position[account] = new_position 
         self.totalBorrowed -= assetTokenAmount
         self.totalReserved += assetTokenAmount
     
     self.updateInterestRate()
+
+@external
+def decreasePosition(_collateralTokenAmount: uint256):
+    self._decreasePosition(_collateralTokenAmount, msg.sender)
+
+@external
+def closePosition():
+    position: Position = self.account_to_position[msg.sender]
+    self._decreasePosition(position.collateralAmount, msg.sender)
 
 @external
 def liquidatePosition(account: address):
@@ -307,8 +338,10 @@ def liquidatePosition(account: address):
     position.borrowedAmount += self.accruePositionInterest(position.borrowedAmount, position.lastInterestIndex)
     assert position.borrowedAmount > 0, "Cannot liquidate as position is not active"
     
-    liquidationAmount: uint256 = SwapExchange(self.swapExchange).swap(self.collateralToken, position.collateralAmount, self, 0, 0, 0, ZERO_ADDRESS)
-    assert liquidationAmount <= position.borrowedAmount, "Position has sufficient collateral"
+    liquidationAmount: uint256 = 0
+    if position.collateralAmount > 0:
+        liquidationAmount = SwapExchange(self.swapExchange).swap(self.collateralToken, position.collateralAmount, self, 0, 0, 0, ZERO_ADDRESS)
+        assert liquidationAmount <= position.borrowedAmount, "Position has sufficient collateral"
 
     remainingDebt: uint256 = position.borrowedAmount - liquidationAmount
     if remainingDebt > position.maintenanceMargin:
@@ -320,7 +353,7 @@ def liquidatePosition(account: address):
     fundingReward: uint256 = surplusAmount * 50 / 100
 
     self.totalReserved += liquidationAmount + remainingDebt + fundingReward
-    self.totalBorrowed -= position.borrowedAmount
+    self.totalBorrowed = self.subOrDefault(self.totalBorrowed, position.borrowedAmount, 0)
 
     self.account_to_position[account] = empty(Position)
 
