@@ -11,6 +11,6 @@ module.exports = {
     abiExporter: {
         path: './testingpath/abi',
         clear: true,
-        flat: true,
+        flat: false,
     },
 };

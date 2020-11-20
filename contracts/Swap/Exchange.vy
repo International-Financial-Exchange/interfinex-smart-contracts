@@ -214,7 +214,8 @@ def swap(
     min_output_token_amount: uint256,
     max_output_token_amount: uint256,
     deadline: uint256,
-    referral: address
+    referral: address,
+    useIfex: bool
 ) -> uint256:
     assert input_token_amount > 0 and ERC20(self.liquidity_token).totalSupply() != 0, "input_token_amount must be greater than 0"
     assert input_token == self.base_token or input_token == self.asset_token, "input_token is not part of this contract"
@@ -229,16 +230,19 @@ def swap(
         input_token_fee = input_token_fee * 49 / 100
         self.safeTransfer(input_token, referral, input_token_fee * 10 / 100)
 
+    if useIfex == True:
+        input_token_fee = input_token_fee * 49 / 100
+
     output_token_amount: uint256 = self._getInputToOutputAmount(input_token, input_token_amount, input_token_fee)
     self.safeTransferFrom(input_token, msg.sender, self, input_token_amount)
 
     assert (output_token_amount >= min_output_token_amount and output_token_amount <= max_output_token_amount) or min_output_token_amount == 0, "Buying output_token amount is greater than slippage"
 
-    # if self.base_token != self.ifex_token_contract and self.asset_token != self.ifex_token_contract:
-    #     input_token_ifex_token_exchange: address = Factory(self.factory_contract).pair_to_exchange(input_token, self.ifex_token_contract)
-    #     dividend: uint256 = Exchange(input_token_ifex_token_exchange).swap(input_token, input_token_fee / 10, self, 0, 0, 0, ZERO_ADDRESS)
-    #     DividendERC20(self.liquidity_token).distributeDividends(dividend * 10 / 100)
-    #     DividendERC20(self.ifex_token_contract).distributeDividends(dividend * 90 / 100)
+    if self.base_token != self.ifex_token_contract and self.asset_token != self.ifex_token_contract and useIfex == True:
+        input_token_ifex_token_exchange: address = Factory(self.factory_contract).pair_to_exchange(input_token, self.ifex_token_contract)
+        dividend: uint256 = Exchange(input_token_ifex_token_exchange).swap(input_token, input_token_fee / 10, self, 0, 0, 0, ZERO_ADDRESS)
+        DividendERC20(self.liquidity_token).distributeDividends(dividend * 10 / 100)
+        DividendERC20(self.ifex_token_contract).distributeDividends(dividend * 90 / 100)
 
     self.safeTransfer(output_token, recipient, output_token_amount)
 

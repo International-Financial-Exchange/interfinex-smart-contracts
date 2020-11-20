@@ -35,16 +35,8 @@ interface SwapExchange:
         min_output_token_amount: uint256,
         max_output_token_amount: uint256,
         deadline: uint256,
-        referral: address
-    ) -> uint256: nonpayable
-    def swapTest(
-        input_token: address,
-        input_token_amount: uint256,
-        recipient: address,
-        min_output_token_amount: uint256,
-        max_output_token_amount: uint256,
-        deadline: uint256,
-        referral: address
+        referral: address,
+        useIfex: bool
     ) -> uint256: nonpayable
 
 
@@ -272,7 +264,7 @@ def getPosition(account: address) -> Position:
 
 # borrow and margin inputs are both the assetToken type
 @external
-def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256) -> uint256:
+def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256, minCollateralAmount: uint256, maxCollateralAmount: uint256, deadline: uint256, useIfex: bool) -> uint256:
     self.protect()
     assert _totalMarginAmount > 0 and _borrowAmount > 0, "Input amounts must be greater than 0"
     assert _borrowAmount <= self.maxBorrowAmount, "_borrowAmount is greater than maxBorrowAmount"
@@ -286,7 +278,7 @@ def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256) -> uin
     assetInitialMargin: uint256 = _totalMarginAmount - assetMaintenanceMargin
     assert assetInitialMargin * ONE / _borrowAmount > self.minInitialMarginRate, "Insufficient initial margin"
 
-    collateralAmount: uint256 = SwapExchange(self.swapExchange).swap(self.assetToken, _borrowAmount + assetInitialMargin, self, 0, 0, 0, ZERO_ADDRESS)
+    collateralAmount: uint256 = SwapExchange(self.swapExchange).swap(self.assetToken, _borrowAmount + assetInitialMargin, self, minCollateralAmount, maxCollateralAmount, deadline, ZERO_ADDRESS, useIfex)
 
     new_position: Position = self.account_to_position[msg.sender]
     new_position.maintenanceMargin += assetMaintenanceMargin # Asset token
@@ -306,7 +298,7 @@ def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256) -> uin
     return new_position.collateralAmount
 
 @internal
-def _decreasePosition(_collateralTokenAmount: uint256, account: address):
+def _decreasePosition(_collateralTokenAmount: uint256, account: address, minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool):
     assert _collateralTokenAmount > 0, "_collateralTokenAmount must be greater than 0"
 
     self.accrueInterest()
@@ -315,7 +307,7 @@ def _decreasePosition(_collateralTokenAmount: uint256, account: address):
     new_position.borrowedAmount += self.accruePositionInterest(new_position.borrowedAmount, new_position.lastInterestIndex) # Asset token
     new_position.lastInterestIndex = self.interestIndex
 
-    assetTokenAmount: uint256 = SwapExchange(self.swapExchange).swap(self.collateralToken, _collateralTokenAmount, self, 0, 0, 0, ZERO_ADDRESS)
+    assetTokenAmount: uint256 = SwapExchange(self.swapExchange).swap(self.collateralToken, _collateralTokenAmount, self,  minAssetAmount, maxAssetAmount, deadline, ZERO_ADDRESS, useIfex)
     if assetTokenAmount >= new_position.borrowedAmount:
         assetTokenProfit: uint256 = (assetTokenAmount - new_position.borrowedAmount) + new_position.maintenanceMargin
         self.safeTransfer(self.assetToken, account, assetTokenProfit)
@@ -333,15 +325,15 @@ def _decreasePosition(_collateralTokenAmount: uint256, account: address):
     self.updateInterestRate()
 
 @external
-def decreasePosition(_collateralTokenAmount: uint256):
+def decreasePosition(_collateralTokenAmount: uint256, minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool):
     self.protect()
-    self._decreasePosition(_collateralTokenAmount, msg.sender)
+    self._decreasePosition(_collateralTokenAmount, msg.sender, minAssetAmount, maxAssetAmount, deadline, useIfex)
 
 @external
-def closePosition():
+def closePosition(minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool):
     self.protect()
     position: Position = self.account_to_position[msg.sender]
-    self._decreasePosition(position.collateralAmount, msg.sender)
+    self._decreasePosition(position.collateralAmount, msg.sender, minAssetAmount, maxAssetAmount, deadline, useIfex)
 
 @external
 def liquidatePosition(account: address):
@@ -354,7 +346,7 @@ def liquidatePosition(account: address):
     
     liquidationAmount: uint256 = 0
     if position.collateralAmount > 0:
-        liquidationAmount = SwapExchange(self.swapExchange).swap(self.collateralToken, position.collateralAmount, self, 0, 0, 0, ZERO_ADDRESS)
+        liquidationAmount = SwapExchange(self.swapExchange).swap(self.collateralToken, position.collateralAmount, self, 0, 0, 0, ZERO_ADDRESS, False)
         assert liquidationAmount <= position.borrowedAmount, "Position has sufficient collateral"
 
     remainingDebt: uint256 = position.borrowedAmount - liquidationAmount
@@ -374,11 +366,10 @@ def liquidatePosition(account: address):
     if liquidatorReward > 0:
         self.safeTransfer(self.assetToken, msg.sender, liquidatorReward)
     if ifexReward > 0:
-        ifexDividends: uint256 = SwapExchange(self.assetIfexSwapExchange).swap(self.assetToken, ifexReward, self, 0, 0, 0, ZERO_ADDRESS)
+        ifexDividends: uint256 = SwapExchange(self.assetIfexSwapExchange).swap(self.assetToken, ifexReward, self, 0, 0, 0, ZERO_ADDRESS, False)
         DividendERC20(self.ifexToken).distributeDividends(ifexDividends)
 
     self.updateInterestRate()
-
 
 ##################################################################
 
