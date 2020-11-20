@@ -28,7 +28,7 @@ describe("Factory contract", function() {
         SwapExchange = await ethers.getContractFactory("Exchange");
         templateSwapExchangeContract = await SwapExchange.deploy();
 
-        SwapFactory = await ethers.getContractFactory("contracts/Swap/Factory.vy:Factory");
+        SwapFactory = await ethers.getContractFactory("SwapFactory");
         swapFactoryContract = await SwapFactory.deploy();
 
         await swapFactoryContract.initialize_factory(
@@ -52,7 +52,7 @@ describe("Factory contract", function() {
         MarginMarket = await ethers.getContractFactory("MarginMarket");
         templateMarginMarketContract = await MarginMarket.deploy();
 
-        MarginFactory = await ethers.getContractFactory("contracts/Margin/Factory.vy:Factory");
+        MarginFactory = await ethers.getContractFactory("MarginFactory");
         marginFactoryContract = await MarginFactory.deploy();
 
         await marginFactoryContract.initialize(

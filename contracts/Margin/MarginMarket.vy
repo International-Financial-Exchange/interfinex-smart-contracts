@@ -151,9 +151,9 @@ def initialize(_assetToken: address, _collateralToken: address, _dividendERC20Te
     ERC20(_assetToken).approve(self.assetIfexSwapExchange, MAX_UINT256)
     ERC20(_collateralToken).approve(self.assetIfexSwapExchange, MAX_UINT256)
     ERC20(_ifexToken).approve(_ifexToken, MAX_UINT256)
-    self.maintenanceMarginRate = ONE * 15 / 100 # 15%
+    self.maintenanceMarginRate = ONE * 15 / 100 # 30%
     self.minInitialMarginRate = ONE * 50 / 100 # 50% - Start at 2x leverage - definitely sufficient for shitcoins lmao
-    self.maxBorrowAmount = ONE * 100_000_000_000 # 100 billion - Should take at most a year to normalize
+    self.maxBorrowAmount = ONE * 1_000_000_000 # 1 billion - Should take at most a year to normalize
     self.interestMultiplier = ONE
 
 @internal
@@ -493,7 +493,7 @@ def finalizeVote(proposalId: uint256):
         elif proposalId == INTEREST_MULTIPLIER_PROPOSAL and self.interestMultiplier < MAX_INTEREST_MULTIPLIER_RATE:
             self.interestMultiplier += self.interestMultiplier * 5 / 100
         elif proposalId == MAX_BORROW_AMOUNT_PROPOSAL and self.maxBorrowAmount < MAX_MAX_BORROW_AMOUNT:
-            self.maxBorrowAmount += self.maxBorrowAmount * 15 / 100
+            self.maxBorrowAmount += self.maxBorrowAmount * 20 / 100
     if winningOption == DOWN_OPTION:
         if proposalId == INITIAL_MARGIN_PROPOSAL and self.minInitialMarginRate > MIN_INITIAL_MARGIN_RATE:
             self.minInitialMarginRate -= self.minInitialMarginRate * 10 / 100
@@ -502,7 +502,7 @@ def finalizeVote(proposalId: uint256):
         elif proposalId == INTEREST_MULTIPLIER_PROPOSAL and self.interestMultiplier > MIN_INTEREST_MULTIPLIER_RATE:
             self.interestMultiplier -= self.interestMultiplier * 5 / 100
         elif proposalId == MAX_BORROW_AMOUNT_PROPOSAL and self.maxBorrowAmount > MIN_MAX_BORROW_AMOUNT:
-            self.maxBorrowAmount -= self.maxBorrowAmount * 15 / 100
+            self.maxBorrowAmount -= self.maxBorrowAmount * 20 / 100
 
     if proposalId == INTEREST_MULTIPLIER_PROPOSAL:
         self.updateInterestRate()

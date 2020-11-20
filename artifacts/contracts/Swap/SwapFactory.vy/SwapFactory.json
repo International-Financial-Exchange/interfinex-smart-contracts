@@ -1,7 +1,7 @@
 {
   "_format": "hh-vyper-artifact-1",
-  "contractName": "Factory",
-  "sourceName": "contracts/Swap/Factory.vy",
+  "contractName": "SwapFactory",
+  "sourceName": "contracts/Swap/SwapFactory.vy",
   "abi": [
     {
       "name": "NewExchange",

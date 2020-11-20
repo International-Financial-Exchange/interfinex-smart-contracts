@@ -57,17 +57,6 @@ def createMarketPair(_token0: address, _token1: address):
     self.createMarket(_token0, _token1, msg.sender)
     self.createMarket(_token1, _token0, msg.sender)
 
-# @internal
-# @view
-# def sortAddresses(address0: address, address1: address) -> address[2]:
-#     uint256_address0: uint256 = convert(address0, uint256)
-#     uint256_address1: uint256 = convert(address1, uint256)
-
-#     if (uint256_address0 > uint256_address1):
-#         return [address1, address0]
-
-#     return [address0, address1]
-
 
 
 

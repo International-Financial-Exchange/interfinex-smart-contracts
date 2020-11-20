@@ -11,7 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "hardhat": "^2.0.3",
-    "hardhat-abi-exporter": "^2.0.6"
+    "hardhat-abi-exporter": "git+https://github.com/International-Financial-Exchange/hardhat-abi-exporter.git"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.0",

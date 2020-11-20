@@ -40,10 +40,10 @@ describe("MarginMarket contract", function() {
         ifexTokenContract = await DividendERC20.deploy();
         await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, 2100000000, ifexTokenContract.address, false);
 
-        SwapExchange = await ethers.getContractFactory("Exchange");
+        SwapExchange = await ethers.getContractFactory("SwapExchange");
         templateSwapExchangeContract = await SwapExchange.deploy();
 
-        SwapFactory = await ethers.getContractFactory("contracts/Swap/Factory.vy:Factory");
+        SwapFactory = await ethers.getContractFactory("SwapFactory");
         swapFactoryContract = await SwapFactory.deploy();
 
         await swapFactoryContract.initialize_factory(
@@ -64,7 +64,7 @@ describe("MarginMarket contract", function() {
             parseEther("1"),
         );
 
-        swapMarketContract = await ethers.getContractAt("Exchange", await swapFactoryContract.pair_to_exchange(token0.address, token1.address))
+        swapMarketContract = await ethers.getContractAt("SwapExchange", await swapFactoryContract.pair_to_exchange(token0.address, token1.address))
 
         await token0.approve(swapMarketContract.address, ethers.constants.MaxUint256);
         await token1.approve(swapMarketContract.address, ethers.constants.MaxUint256);
@@ -438,7 +438,7 @@ describe("MarginMarket contract", function() {
 
             await marginMarketContract.finalizeVote(4);
 
-            expect(await marginMarketContract.maxBorrowAmount()).to.equal(maxBorrowAmountBefore.add(maxBorrowAmountBefore.mul("15").div("100")));
+            expect(await marginMarketContract.maxBorrowAmount()).to.equal(maxBorrowAmountBefore.add(maxBorrowAmountBefore.mul("20").div("100")));
         });
 
         it("Should finalize interest multiplier vote", async function() {
