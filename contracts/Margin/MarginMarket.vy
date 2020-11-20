@@ -91,6 +91,14 @@ def subOrDefault(a: uint256, b: uint256, defaultValue: uint256) -> uint256:
     return a - b    
 
 # Each user should only be able to call each external function once per block
+lastUser: address
+lastBlock: uint256
+
+@internal
+def protect():
+    assert self.lastUser != tx.origin or self.lastBlock != block.number, "Protected!"
+    self.lastUser = tx.origin
+    self.lastBlock = block.number
 
 # Contracts
 collateralToken: public(address)
@@ -152,7 +160,7 @@ def initialize(_assetToken: address, _collateralToken: address, _dividendERC20Te
     ERC20(_collateralToken).approve(self.assetIfexSwapExchange, MAX_UINT256)
     ERC20(_ifexToken).approve(_ifexToken, MAX_UINT256)
     self.maintenanceMarginRate = ONE * 15 / 100 # 15%
-    self.minInitialMarginRate = ONE * 50 / 100 # 50% - Start at 2x leverage
+    self.minInitialMarginRate = ONE * 50 / 100 # 50% - Start at 2x leverage - definitely sufficient for shitcoins lmao
     self.maxBorrowAmount = ONE * 100_000_000_000 # 100 billion - Should take at most a year to normalize
     self.interestMultiplier = ONE
 
@@ -200,6 +208,7 @@ def updateInterestRate():
 
 @external
 def deposit(_amount: uint256):
+    self.protect()
     self.accrueInterest()
 
     mintedLiquidityAmount: uint256 = ONE
@@ -214,6 +223,7 @@ def deposit(_amount: uint256):
 
 @external
 def withdraw(_liquidityTokenAmount: uint256) -> uint256:
+    self.protect()
     assert _liquidityTokenAmount > 0, "Withdraw amount must be greater than 0"
     self.accrueInterest()
 
@@ -263,6 +273,7 @@ def getPosition(account: address) -> Position:
 # borrow and margin inputs are both the assetToken type
 @external
 def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256) -> uint256:
+    self.protect()
     assert _totalMarginAmount > 0 and _borrowAmount > 0, "Input amounts must be greater than 0"
     assert _borrowAmount <= self.maxBorrowAmount, "_borrowAmount is greater than maxBorrowAmount"
 
@@ -323,15 +334,18 @@ def _decreasePosition(_collateralTokenAmount: uint256, account: address):
 
 @external
 def decreasePosition(_collateralTokenAmount: uint256):
+    self.protect()
     self._decreasePosition(_collateralTokenAmount, msg.sender)
 
 @external
 def closePosition():
+    self.protect()
     position: Position = self.account_to_position[msg.sender]
     self._decreasePosition(position.collateralAmount, msg.sender)
 
 @external
 def liquidatePosition(account: address):
+    self.protect()
     self.accrueInterest()
     
     position: Position = self.account_to_position[account]
@@ -410,6 +424,7 @@ def _withdrawVote(proposalId: uint256, voteOption: uint256, account: address):
 
 @external
 def depositVote(proposalId: uint256, voteOption: uint256, amount: uint256):
+    self.protect()
     assert voteOption <= 3, "Vote option does not exist"
     if self.proposalFinalisationDate[proposalId] == 0:
         self.proposalFinalisationDate[proposalId] = block.timestamp + DAY
@@ -429,11 +444,14 @@ def depositVote(proposalId: uint256, voteOption: uint256, amount: uint256):
     self.userVotes[msg.sender][proposalId][voteOption] += amount
 
 @external
-def withdrawVote(proposalId: uint256, voteOption: uint256):
+def withdrawVote(proposalId: uint256, voteOption: uint256):    
+    self.protect()
     assert voteOption <= 3, "Vote option does not exist"
     assert self.userLastVote[msg.sender][proposalId] != self.proposalFinalisationDate[proposalId], "User is currently voting in an active proposal"
 
     self._withdrawVote(proposalId, voteOption, msg.sender)
+
+# lol... Git gud
 
 @internal
 @view
@@ -465,6 +483,7 @@ MIN_MAX_BORROW_AMOUNT: constant(uint256) = 100
 
 @external
 def finalizeVote(proposalId: uint256):
+    self.protect()
     assert block.timestamp >= self.proposalFinalisationDate[proposalId], "Proposal still has time left"
     assert proposalId != 0 and proposalId <= 4, "Proposal does not exist"
 

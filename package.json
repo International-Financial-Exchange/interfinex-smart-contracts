@@ -10,7 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "hardhat": "^2.0.3"
+    "hardhat": "^2.0.3",
+    "hardhat-abi-exporter": "^2.0.6"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.0",
