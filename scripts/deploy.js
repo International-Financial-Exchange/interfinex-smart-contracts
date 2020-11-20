@@ -20,17 +20,17 @@ const tokenContracts = async () =>  {
 
     const tokens = [];
     for (i in new Array(4).fill()) {
-        const tokenContract = await tracked.deploy("ERC20", `token${i}`, RESET);
+        const tokenContract = await tracked.deploy("ERC20", `Token${i}`, RESET);
         await tokenContract.initializeERC20(`token${i}`, `${i}`, 18, 2100000000, true);
         tokens.push(tokenContract);
     }
 
     console.log(`🚜 Deployed ${tokens.length} testnet ERC20 token contracts`);
 
-    const templateDividendERC20Contract = await tracked.deploy("DividendERC20", "templateDividendERC20", RESET);
+    const templateDividendERC20Contract = await tracked.deploy("DividendERC20", "TemplateDividendERC20", RESET);
     console.log(`🚜 Deployed template DividendERC20 contract`);
 
-    const ifexTokenContract = await tracked.deploy("DividendERC20", "ifexToken", RESET);
+    const ifexTokenContract = await tracked.deploy("DividendERC20", "IfexToken", RESET);
     await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, 2100000000, ifexTokenContract.address, false);
     console.log(`🚜 Deployed testnet IFEX token contract`);
 
@@ -39,10 +39,10 @@ const tokenContracts = async () =>  {
 
 const swapContracts = async (templateDividendERC20Contract, ifexTokenContract)  => {
     console.log("");
-    const templateSwapExchangeContract = await tracked.deploy("SwapExchange", "templateSwapExchange", RESET);
+    const templateSwapExchangeContract = await tracked.deploy("SwapExchange", "TemplateSwapExchange", RESET);
     console.log(`🚜 Deployed template SwapExchange contract`);
 
-    const swapFactoryContract = await tracked.deploy("SwapFactory", "swapFactory", RESET);
+    const swapFactoryContract = await tracked.deploy("SwapFactory", "SwapFactory", RESET);
 
     await swapFactoryContract.initialize_factory(
         parseEther("0.001"), 
@@ -60,7 +60,7 @@ const marginContracts = async (templateDividendERC20Contract, ifexTokenContract,
     const templateMarginMarketContract = await tracked.deploy("MarginMarket", "templateMarginMarket", RESET);
     console.log(`🚜 Deployed template MarginMarket contract`);
     
-    const marginFactoryContract = await tracked.deploy("MarginFactory", "marginFactory", RESET);
+    const marginFactoryContract = await tracked.deploy("MarginFactory", "MarginFactory", RESET);
 
     await marginFactoryContract.initialize(
         templateMarginMarketContract.address, 

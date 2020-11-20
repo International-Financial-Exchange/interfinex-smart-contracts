@@ -13,9 +13,9 @@ extendEnvironment((hre) => {
 
     hre.tracked = {
         contracts: JSON.parse(fs.readFileSync(CONTRACTS_FILE)),
-        deploy: async function (artifactName, contractName, reset) {
+        deploy: async function (artifactName, name, reset) {
             let contractInstance;
-            if (!contractName) contractName = artifactName;
+            if (!name) name = artifactName;
 
             const NETWORK = hre.network.name;
     
@@ -24,17 +24,17 @@ extendEnvironment((hre) => {
     
             const contracts = JSON.parse(fs.readFileSync(CONTRACTS_FILE));
 
-            if (!contracts[NETWORK] || !contracts[NETWORK][contractName] || reset) {
+            if (!contracts[NETWORK] || !contracts[NETWORK][name] || reset) {
                 const contractFactory = await ethers.getContractFactory(artifactName);
                 contractInstance = await contractFactory.deploy();
-                const { contractAddress, transactionHash: deploymentTransactionHash } = await contractInstance.deployTransaction.wait();
+                const { contractAddress: address, transactionHash: deploymentTransactionHash } = await contractInstance.deployTransaction.wait();
                 
                 if (!contracts[NETWORK]) contracts[NETWORK] = {};
-                if (!contracts[NETWORK][contractName]) contracts[NETWORK][contractName] = {};
+                if (!contracts[NETWORK][name]) contracts[NETWORK][name] = {};
     
-                contracts[NETWORK][contractName] = {
-                    contractName,
-                    contractAddress,
+                contracts[NETWORK][name] = {
+                    name,
+                    address,
                     artifactName,
                     deploymentTransactionHash,
                 };
