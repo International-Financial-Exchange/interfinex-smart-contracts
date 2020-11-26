@@ -38,6 +38,7 @@ def initialize(_margin_market_template: address, _dividend_erc20_template: addre
     self.swap_factory = _swap_factory
     return
 
+# TODO: Mapping liquidity token to market - same with swap market
 @internal
 def createMarket(assetToken: address, collateralToken: address, creator: address):
     # Create and init the new margin market
@@ -51,6 +52,7 @@ def createMarket(assetToken: address, collateralToken: address, creator: address
     self.id_to_margin_market[new_id] = margin_market
     self.pair_to_margin_market[assetToken][collateralToken] = margin_market
     self.margin_market_to_pair[margin_market] = [assetToken, collateralToken]
+    log NewMarginMarket(creator, margin_market, assetToken, collateralToken)
 
 @external
 def createMarketPair(_token0: address, _token1: address):

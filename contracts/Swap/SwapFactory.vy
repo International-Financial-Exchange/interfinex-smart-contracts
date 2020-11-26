@@ -114,8 +114,8 @@ def _create_exchange(_token0: address, _token1: address, _token0_amount: uint256
     self.pair_to_exchange[token1][token0] = exchange
     self.exchange_to_pair[exchange] = [token0, token1]
 
-    self.id_to_exchange[self.exchange_count] = exchange
     self.exchange_count += 1
+    self.id_to_exchange[self.exchange_count] = exchange
 
     Exchange(exchange).initialize_exchange(
         token0, 
@@ -138,7 +138,13 @@ def _create_exchange(_token0: address, _token1: address, _token0_amount: uint256
     return exchange
     
 @external
-def create_exchange(base_token: address, asset_token: address, base_token_amount: uint256, asset_token_amount: uint256, ifex_token_amount: uint256):
+def create_exchange(
+    base_token: address, 
+    asset_token: address, 
+    base_token_amount: uint256, 
+    asset_token_amount: uint256, 
+    ifex_token_amount: uint256
+):
     self.safeTransferFrom(base_token, msg.sender, self, base_token_amount)
     self.safeTransferFrom(asset_token, msg.sender, self, asset_token_amount)
     self.safeTransferFrom(self.ifex_token_contract, msg.sender, self, ifex_token_amount)

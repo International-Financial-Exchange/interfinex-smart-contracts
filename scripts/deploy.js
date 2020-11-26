@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 const { parseEther } = ethers.utils;
 const ONE = ethers.utils.parseEther("1");
 
-let ERC20, DividendERC20, SwapExchange, SwapFactory, MarginMarket, MarginFactory;
+let ERC20, DividendERC20, SwapExchange, SwapFactory, MarginMarket, MarginFactory, WrappedEther;
 const RESET = true;
 
 const initializeArtifacts = async () => {
@@ -13,6 +13,7 @@ const initializeArtifacts = async () => {
     SwapFactory = await ethers.getContractFactory("SwapFactory");
     MarginMarket = await ethers.getContractFactory("MarginMarket");
     MarginFactory = await ethers.getContractFactory("MarginFactory");
+    WrappedEther = await ethers.getContractFactory("WrappedEther");
 };
 
 const tokenContracts = async () =>  {
@@ -37,7 +38,18 @@ const tokenContracts = async () =>  {
     return { tokens, templateDividendERC20Contract, ifexTokenContract };
 };
 
-const swapContracts = async (templateDividendERC20Contract, ifexTokenContract)  => {
+const wrappedEtherContract = async () => {
+    console.log("");
+
+    const wrappedEtherContract = await tracked.deploy("WrappedEther", `WrappedEther`, RESET);
+    await wrappedEtherContract.deposit({ value: parseEther("100") });
+
+    console.log(`🚜 Deployed Wrapped Ether contract`);
+
+    return { wrappedEtherContract };
+};
+
+const swapContracts = async (templateDividendERC20Contract, ifexTokenContract, wrappedEtherContract)  => {
     console.log("");
     const templateSwapExchangeContract = await tracked.deploy("SwapExchange", "TemplateSwapExchange", RESET);
     console.log(`🚜 Deployed template SwapExchange contract`);
@@ -52,7 +64,15 @@ const swapContracts = async (templateDividendERC20Contract, ifexTokenContract)  
     );
     console.log(`🚜 Deployed and Initialized SwapFactory contract`);
 
-    return { swapFactoryContract };
+    const swapEthRouterContract = await tracked.deploy("SwapEthRouter", "SwapEthRouter", RESET);
+    await swapEthRouterContract.initialize(
+        wrappedEtherContract.address, 
+        swapFactoryContract.address, 
+        ifexTokenContract.address
+    );
+    console.log(`🚜 Deployed and Initialized SwapEthRouter contract`);
+
+    return { swapFactoryContract, swapEthRouterContract };
 };
 
 const marginContracts = async (templateDividendERC20Contract, ifexTokenContract, swapFactoryContract) => {
@@ -76,7 +96,8 @@ const marginContracts = async (templateDividendERC20Contract, ifexTokenContract,
 const deploy = {
     tokenContracts,
     swapContracts,
-    marginContracts
+    marginContracts,
+    wrappedEtherContract,
 }
 
 async function main() {
@@ -85,7 +106,8 @@ async function main() {
     console.log("\n🚀 Starting Deployment");
 
     const { tokens, templateDividendERC20Contract, ifexTokenContract } = await deploy.tokenContracts();
-    const { swapFactoryContract } = await deploy.swapContracts(templateDividendERC20Contract, ifexTokenContract);
+    const { wrappedEtherContract } = await deploy.wrappedEtherContract();
+    const { swapFactoryContract } = await deploy.swapContracts(templateDividendERC20Contract, ifexTokenContract, wrappedEtherContract);
     const { marginFactoryContract } = await deploy.marginContracts(templateDividendERC20Contract, ifexTokenContract, swapFactoryContract);
 };
 

@@ -238,6 +238,7 @@ def swap(
 
     assert (output_token_amount >= min_output_token_amount and output_token_amount <= max_output_token_amount) or min_output_token_amount == 0, "Buying output_token amount is greater than slippage"
 
+    # TODO: Don't need two distributions or can set recipient to the swap function
     if self.base_token != self.ifex_token_contract and self.asset_token != self.ifex_token_contract and useIfex == True:
         input_token_ifex_token_exchange: address = Factory(self.factory_contract).pair_to_exchange(input_token, self.ifex_token_contract)
         dividend: uint256 = Exchange(input_token_ifex_token_exchange).swap(input_token, input_token_fee / 10, self, 0, 0, 0, ZERO_ADDRESS)

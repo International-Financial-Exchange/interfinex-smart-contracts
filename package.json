@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+      "start-ganache": "ganache-cli -p 7545 --account=0x48390f313c5913926e89664ca9beef2fd91a9ca28b603f500a4dd5eee269bf3a,1000000000000000000000"
   },
   "keywords": [],
   "author": "",

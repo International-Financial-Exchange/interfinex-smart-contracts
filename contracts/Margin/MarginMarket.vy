@@ -92,6 +92,32 @@ def protect():
     self.lastUser = tx.origin
     self.lastBlock = block.number
 
+event Deposit:
+    user: indexed(address)
+    amount: uint256
+
+event Withdraw:
+    user: indexed(address)
+    amount: uint256
+
+event IncreasePosition:
+    user: indexed(address)
+    borrowedAmount: uint256
+    collateralToken: uint256
+    maintenanceMargin: uint256
+
+event DecreasePosition:
+    user: indexed(address)
+    borrowedAmount: uint256
+    collateralToken: uint256
+    maintenanceMargin: uint256
+
+event LiquidatePosition:
+    user: indexed(address)
+    borrowedAmount: uint256
+    collateralToken: uint256
+    maintenanceMargin: uint256
+
 # Contracts
 collateralToken: public(address)
 assetToken: public(address)
@@ -113,6 +139,13 @@ interestMultiplier: public(uint256)
 minInitialMarginRate: public(uint256)
 maintenanceMarginRate: public(uint256)
 maxBorrowAmount: public(uint256)
+maxLiquidateVolume: public(uint256)
+
+liquidateVolume: public(uint256)
+lastLiquidateBlock: public(uint256)
+
+DAY: constant(uint256) =  60 * 60 * 24
+votingDuration: public(uint256) 
 
 isInitialized: public(bool)
 
@@ -154,6 +187,8 @@ def initialize(_assetToken: address, _collateralToken: address, _dividendERC20Te
     self.maintenanceMarginRate = ONE * 15 / 100 # 30%
     self.minInitialMarginRate = ONE * 50 / 100 # 50% - Start at 2x leverage - definitely sufficient for shitcoins lmao
     self.maxBorrowAmount = ONE * 1_000_000_000 # 1 billion - Should take at most a year to normalize
+    self.votingDuration = DAY * 3
+    self.maxLiquidateVolume = MAX_UINT256 / 10
     self.interestMultiplier = ONE
 
 @internal
@@ -199,7 +234,7 @@ def updateInterestRate():
     self.interestRate = (self.mulTruncate(utilizationRate, self.interestMultiplier) ** 2) / ONE
 
 @external
-def deposit(_amount: uint256):
+def deposit(_amount: uint256) -> uint256:
     self.protect()
     self.accrueInterest()
 
@@ -212,6 +247,9 @@ def deposit(_amount: uint256):
 
     self.totalReserved += _amount
     self.updateInterestRate()
+
+    log Deposit(msg.sender, _amount)
+    return mintedLiquidityAmount
 
 @external
 def withdraw(_liquidityTokenAmount: uint256) -> uint256:
@@ -228,6 +266,8 @@ def withdraw(_liquidityTokenAmount: uint256) -> uint256:
     self.safeTransfer(self.assetToken, msg.sender, assetTokenAmount)
 
     self.updateInterestRate()
+
+    log Withdraw(msg.sender, assetTokenAmount)
     return assetTokenAmount
 
 @view
@@ -295,6 +335,7 @@ def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256, minCol
 
     self.updateInterestRate()
 
+    log IncreasePosition(msg.sender, new_position.borrowedAmount, new_position.collateralAmount, new_position.maintenanceMargin)
     return new_position.collateralAmount
 
 @internal
@@ -323,6 +364,7 @@ def _decreasePosition(_collateralTokenAmount: uint256, account: address, minAsse
         self.totalReserved += assetTokenAmount
     
     self.updateInterestRate()
+    log DecreasePosition(account, new_position.borrowedAmount, new_position.collateralAmount, new_position.maintenanceMargin)
 
 @external
 def decreasePosition(_collateralTokenAmount: uint256, minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool):
@@ -349,6 +391,12 @@ def liquidatePosition(account: address):
         liquidationAmount = SwapExchange(self.swapExchange).swap(self.collateralToken, position.collateralAmount, self, 0, 0, 0, ZERO_ADDRESS, False)
         assert liquidationAmount <= position.borrowedAmount, "Position has sufficient collateral"
 
+    assert self.liquidateVolume <= self.maxLiquidateVolume or block.number != self.lastLiquidateBlock, "Too many liquidations in this block"
+    if block.number != self.lastLiquidateBlock:
+        self.lastLiquidateBlock = block.number
+        self.liquidateVolume = 0
+    self.liquidateVolume += position.borrowedAmount
+
     remainingDebt: uint256 = position.borrowedAmount - liquidationAmount
     if remainingDebt > position.maintenanceMargin:
         remainingDebt = position.maintenanceMargin
@@ -370,6 +418,7 @@ def liquidatePosition(account: address):
         DividendERC20(self.ifexToken).distributeDividends(ifexDividends)
 
     self.updateInterestRate()
+    log LiquidatePosition(account, position.borrowedAmount, position.collateralAmount, position.maintenanceMargin)
 
 ##################################################################
 
@@ -383,32 +432,34 @@ INITIAL_MARGIN_PROPOSAL: constant(uint256) = 1
 MAINTENANCE_MARGIN_PROPOSAL: constant(uint256) = 2
 INTEREST_MULTIPLIER_PROPOSAL: constant(uint256) = 3
 MAX_BORROW_AMOUNT_PROPOSAL: constant(uint256) = 4
+MAX_LIQUIDATE_VOLUME_PROPOSAL: constant(uint256) = 5
+VOTING_DURATION_PROPOSAL: constant(uint256) = 6
 
 # Proposal options
 DOWN_OPTION: constant(uint256) = 1
 PRESERVE_OPTION: constant(uint256) = 2
 UP_OPTION: constant(uint256) = 3
 
-DAY: constant(uint256) =  60 * 60 * 24
-
 # proposal id -> vote option -> weight
 proposalVotes: public(HashMap[uint256, HashMap[uint256, uint256]])
 # proposal id -> vote option count
 proposalVoteOptions: public(HashMap[uint256, uint256])
+# proposal id -> option count
+proposalBaselineVote: public(HashMap[uint256, uint256])
 # proposal id -> block timestamp
 proposalFinalisationDate: public(HashMap[uint256, uint256])
 # user -> proposal id -> vote option -> weight
-userVotes: public(HashMap[address, HashMap[uint256, HashMap[uint256, uint256]]])
+userVotes: public(HashMap[address, HashMap[uint256, uint256]])
 # user -> proposal id -> block timestamp
 userLastVote: public(HashMap[address, HashMap[uint256, uint256]])
 # account -> deposit
 userDeposits: public(HashMap[address, uint256])
 
 @internal
-def _withdrawVote(proposalId: uint256, voteOption: uint256, account: address):
-    amount: uint256 = self.userVotes[account][proposalId][voteOption]
+def _withdrawVote(proposalId: uint256, account: address):
+    amount: uint256 = self.userVotes[account][proposalId]
 
-    self.userVotes[account][proposalId][voteOption] = 0
+    self.userVotes[account][proposalId] = 0
     self.userDeposits[account] -= amount
 
     ERC20(self.ifexToken).transfer(account, amount)
@@ -418,10 +469,10 @@ def depositVote(proposalId: uint256, voteOption: uint256, amount: uint256):
     self.protect()
     assert voteOption <= 3, "Vote option does not exist"
     if self.proposalFinalisationDate[proposalId] == 0:
-        self.proposalFinalisationDate[proposalId] = block.timestamp + DAY
+        self.proposalFinalisationDate[proposalId] = block.timestamp + self.votingDuration
 
     assert self.userLastVote[msg.sender][proposalId] != self.proposalFinalisationDate[proposalId], "User has already voted on this proposal"
-    self._withdrawVote(proposalId, voteOption, msg.sender) # Reset user votes from previous proposals
+    self._withdrawVote(proposalId, msg.sender) # Reset user votes from previous proposals
 
     ERC20(self.ifexToken).transferFrom(msg.sender, self, amount)
     self.userDeposits[msg.sender] += amount
@@ -432,15 +483,14 @@ def depositVote(proposalId: uint256, voteOption: uint256, amount: uint256):
         self.proposalVotes[proposalId][voteOption] += amount
         
     self.userLastVote[msg.sender][proposalId] = self.proposalFinalisationDate[proposalId]
-    self.userVotes[msg.sender][proposalId][voteOption] += amount
+    self.userVotes[msg.sender][proposalId] = amount
 
 @external
-def withdrawVote(proposalId: uint256, voteOption: uint256):    
+def withdrawVote(proposalId: uint256,):    
     self.protect()
-    assert voteOption <= 3, "Vote option does not exist"
     assert self.userLastVote[msg.sender][proposalId] != self.proposalFinalisationDate[proposalId], "User is currently voting in an active proposal"
 
-    self._withdrawVote(proposalId, voteOption, msg.sender)
+    self._withdrawVote(proposalId, msg.sender)
 
 # lol... Git gud
 
@@ -471,6 +521,10 @@ MAX_INTEREST_MULTIPLIER_RATE: constant(uint256) = ONE * 10
 MIN_INTEREST_MULTIPLIER_RATE: constant(uint256) = ONE * 1 / 1000
 MAX_MAX_BORROW_AMOUNT: constant(uint256) = MAX_UINT256 / 10 ** 12
 MIN_MAX_BORROW_AMOUNT: constant(uint256) = 100
+MAX_MAX_LIQUIDATE_VOLUME: constant(uint256) = MAX_UINT256
+MIN_MAX_LIQUIDATE_VOLUME: constant(uint256) = 1_000_000_000
+MAX_VOTING_DURATION: constant(uint256) = DAY * 14
+MIN_VOTING_DURATION: constant(uint256) = DAY / 2 # 12 hours - just in case of some NTP server consensus error or such.
 
 @external
 def finalizeVote(proposalId: uint256):
@@ -482,8 +536,7 @@ def finalizeVote(proposalId: uint256):
     winningVotes: uint256 = 0
     winningOption, winningVotes = self._getWinningOption(proposalId)
 
-    if proposalId == INTEREST_MULTIPLIER_PROPOSAL:
-        self.accrueInterest()
+    self.accrueInterest()
 
     if winningOption == UP_OPTION:
         if proposalId == INITIAL_MARGIN_PROPOSAL and self.minInitialMarginRate < MAX_INITIAL_MARGIN_RATE:
@@ -494,6 +547,10 @@ def finalizeVote(proposalId: uint256):
             self.interestMultiplier += self.interestMultiplier * 5 / 100
         elif proposalId == MAX_BORROW_AMOUNT_PROPOSAL and self.maxBorrowAmount < MAX_MAX_BORROW_AMOUNT:
             self.maxBorrowAmount += self.maxBorrowAmount * 20 / 100
+        elif proposalId == MAX_LIQUIDATE_VOLUME_PROPOSAL and self.maxLiquidateVolume < MAX_MAX_LIQUIDATE_VOLUME:
+            self.maxLiquidateVolume += self.maxLiquidateVolume * 30 / 100
+        elif proposalId == VOTING_DURATION_PROPOSAL and self.votingDuration < MAX_VOTING_DURATION:
+            self.votingDuration += self.votingDuration * 15 / 100
     if winningOption == DOWN_OPTION:
         if proposalId == INITIAL_MARGIN_PROPOSAL and self.minInitialMarginRate > MIN_INITIAL_MARGIN_RATE:
             self.minInitialMarginRate -= self.minInitialMarginRate * 10 / 100
@@ -503,12 +560,22 @@ def finalizeVote(proposalId: uint256):
             self.interestMultiplier -= self.interestMultiplier * 5 / 100
         elif proposalId == MAX_BORROW_AMOUNT_PROPOSAL and self.maxBorrowAmount > MIN_MAX_BORROW_AMOUNT:
             self.maxBorrowAmount -= self.maxBorrowAmount * 20 / 100
+        elif proposalId == MAX_LIQUIDATE_VOLUME_PROPOSAL and self.maxLiquidateVolume > MIN_MAX_LIQUIDATE_VOLUME:
+            self.maxLiquidateVolume -= self.maxLiquidateVolume * 30 / 100
+        elif proposalId == VOTING_DURATION_PROPOSAL and self.votingDuration > MIN_VOTING_DURATION:
+            self.votingDuration -= self.votingDuration * 15 / 100
 
-    if proposalId == INTEREST_MULTIPLIER_PROPOSAL:
-        self.updateInterestRate()
+    self.updateInterestRate()
 
     self.proposalVotes[proposalId][UP_OPTION] = 0
     self.proposalVotes[proposalId][DOWN_OPTION] = 0
-    self.proposalVotes[proposalId][PRESERVE_OPTION] = 0
 
-    self.proposalFinalisationDate[proposalId] = block.timestamp + DAY
+    if winningOption == PRESERVE_OPTION:
+        baselineVote: uint256 = self.proposalBaselineVote[proposalId]
+        self.proposalVotes[proposalId][PRESERVE_OPTION] = baselineVote
+    else:
+        newBaselineVote: uint256 = winningVotes * 90 / 100
+        self.proposalBaselineVote[proposalId] = newBaselineVote
+        self.proposalVotes[proposalId][PRESERVE_OPTION] = newBaselineVote
+
+    self.proposalFinalisationDate[proposalId] = block.timestamp + self.votingDuration
