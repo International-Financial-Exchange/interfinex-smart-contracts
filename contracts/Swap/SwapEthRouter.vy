@@ -84,6 +84,16 @@ interface SwapExchange:
         recipient: address, 
         deadline: uint256
     ): nonpayable
+    def swap(
+        input_token: address,
+        input_token_amount: uint256,
+        recipient: address,
+        min_output_token_amount: uint256,
+        max_output_token_amount: uint256,
+        deadline: uint256,
+        referral: address,
+        useIfex: bool
+    ) -> uint256: nonpayable
 
 wrappedEtherContract: public(address)
 swapFactoryContract: public(address)
@@ -102,6 +112,12 @@ def initialize(_wrappedEtherContract: address, _swapFactoryContract: address, _i
     self.safeApprove(self.wrappedEtherContract, self.swapFactoryContract, MAX_UINT256)
     self.safeApprove(self.ifexTokenContract, self.swapFactoryContract, MAX_UINT256)
 
+@internal
+def approveContract(tokenContract: address, exchangeContract: address):
+    assetAllowance: uint256 = ERC20(tokenContract).allowance(self, exchangeContract)
+    if assetAllowance < MAX_UINT256 / 2:
+        ERC20(tokenContract).approve(exchangeContract, MAX_UINT256)
+
 @external
 @payable
 def create_exchange(
@@ -113,7 +129,7 @@ def create_exchange(
     self.safeTransferFrom(self.ifexTokenContract, msg.sender, self, ifexTokenAmount)
     WrappedEther(self.wrappedEtherContract).deposit(value=msg.value)
 
-    self.safeApprove(assetTokenContract, self.swapFactoryContract, MAX_UINT256)
+    self.approveContract(assetTokenContract, self.swapFactoryContract)
     SwapFactory(self.swapFactoryContract).create_exchange(
         self.wrappedEtherContract, 
         assetTokenContract, 
@@ -150,8 +166,8 @@ def mint_liquidity(
         self.wrappedEtherContract
     )
 
-    self.safeApprove(assetTokenContract, exchangeContract, MAX_UINT256)
-    self.safeApprove(self.wrappedEtherContract, exchangeContract, MAX_UINT256)
+    self.approveContract(assetTokenContract, exchangeContract)
+    self.approveContract(self.wrappedEtherContract, exchangeContract)
 
     SwapExchange(exchangeContract).mint_liquidity(
         msg.value, 
@@ -180,7 +196,7 @@ def burn_liquidity(
     liquidityTokenContract: address = SwapExchange(exchangeContract).liquidity_token()
 
     self.safeTransferFrom(liquidityTokenContract, msg.sender, self, liquidityTokenAmount)
-    self.safeApprove(liquidityTokenContract, exchangeContract, MAX_UINT256)
+    self.approveContract(liquidityTokenContract, exchangeContract)
 
     SwapExchange(exchangeContract).burn_liquidity(
         liquidityTokenAmount, 
@@ -193,3 +209,50 @@ def burn_liquidity(
     WrappedEther(self.wrappedEtherContract).withdraw(wethBalance)
 
     send(msg.sender, self.balance)
+
+@external
+@payable
+def swap(
+    assetTokenContract: address,
+    inputTokenContract: address,
+    _inputTokenAmount: uint256,
+    recipient: address,
+    minOutputTokenAmount: uint256,
+    maxOutputTokenAmount: uint256,
+    deadline: uint256,
+    referral: address,
+    useIfex: bool
+) -> uint256:
+    exchangeContract: address = SwapFactory(self.swapFactoryContract).pair_to_exchange(
+        assetTokenContract, 
+        self.wrappedEtherContract
+    )
+    self.approveContract(inputTokenContract, exchangeContract)
+
+    inputTokenAmount: uint256 = _inputTokenAmount
+    if inputTokenContract == self.wrappedEtherContract:
+        inputTokenAmount = msg.value
+        WrappedEther(self.wrappedEtherContract).deposit(value=msg.value)
+    else:
+        self.safeTransferFrom(assetTokenContract, msg.sender, self, inputTokenAmount)
+
+    swappedAmount: uint256 = SwapExchange(exchangeContract).swap(
+        inputTokenContract,
+        inputTokenAmount,
+        self,
+        minOutputTokenAmount,
+        maxOutputTokenAmount,
+        deadline,
+        referral,
+        useIfex
+    )
+
+    if inputTokenContract == self.wrappedEtherContract:
+        self.safeTransfer(assetTokenContract, recipient, ERC20(assetTokenContract).balanceOf(self))
+    else:
+        wethBalance: uint256 = ERC20(self.wrappedEtherContract).balanceOf(self)
+        WrappedEther(self.wrappedEtherContract).withdraw(wethBalance)
+        send(msg.sender, self.balance)
+
+    return swappedAmount
+    

@@ -127,6 +127,9 @@ swapExchange: public(address)
 swapFactory: public(address)
 assetIfexSwapExchange: public(address)
 
+# owner -> spender -> isAuthorized
+isAuthorized: public(HashMap[address, HashMap[address, bool]])
+
 # Loan info
 interestIndex: public(uint256) # Accumulated interest
 totalBorrowed: public(uint256) # Amount in active borrows
@@ -138,11 +141,13 @@ lastUpdate: public(uint256) # The last block number since accrueInterest was cal
 interestMultiplier: public(uint256)
 minInitialMarginRate: public(uint256)
 maintenanceMarginRate: public(uint256)
-maxBorrowAmount: public(uint256)
-maxLiquidateVolume: public(uint256)
+maxBorrowAmountRate: public(uint256)
+maxLiquidateVolumeRate: public(uint256)
 
-liquidateVolume: public(uint256)
+currentBlockLiquidations: public(uint256)
 lastLiquidateBlock: public(uint256)
+currentBlockBorrows: public(uint256)
+lastBorrowBlock: public(uint256)
 
 DAY: constant(uint256) =  60 * 60 * 24
 votingDuration: public(uint256) 
@@ -186,9 +191,9 @@ def initialize(_assetToken: address, _collateralToken: address, _dividendERC20Te
     ERC20(_ifexToken).approve(_ifexToken, MAX_UINT256)
     self.maintenanceMarginRate = ONE * 15 / 100 # 30%
     self.minInitialMarginRate = ONE * 50 / 100 # 50% - Start at 2x leverage - definitely sufficient for shitcoins lmao
-    self.maxBorrowAmount = ONE * 1_000_000_000 # 1 billion - Should take at most a year to normalize
+    self.maxBorrowAmountRate = ONE * 50 / 100 # 50%
     self.votingDuration = DAY * 3
-    self.maxLiquidateVolume = MAX_UINT256 / 10
+    self.maxLiquidateVolumeRate = ONE * 50 / 100
     self.interestMultiplier = ONE
 
 @internal
@@ -231,7 +236,7 @@ def updateInterestRate():
         self.interestRate = 0
         return
 
-    self.interestRate = (self.mulTruncate(utilizationRate, self.interestMultiplier) ** 2) / ONE
+    self.interestRate = ((self.mulTruncate(utilizationRate, self.interestMultiplier) ** 2) / ONE) / 2336000
 
 @external
 def deposit(_amount: uint256) -> uint256:
@@ -302,12 +307,36 @@ def getPosition(account: address) -> Position:
     position.borrowedAmount += accruedPositionInterest
     return position
 
+@external
+def authorize(spender: address):
+    self.isAuthorized[msg.sender][spender] = True
+
+@external
+def deauthorize(spender: address):
+    self.isAuthorized[msg.sender][spender] = False
+
 # borrow and margin inputs are both the assetToken type
 @external
-def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256, minCollateralAmount: uint256, maxCollateralAmount: uint256, deadline: uint256, useIfex: bool) -> uint256:
+def increasePosition(
+    _totalMarginAmount: uint256, 
+    _borrowAmount: uint256, 
+    minCollateralAmount: uint256, 
+    maxCollateralAmount: uint256, 
+    deadline: uint256, 
+    useIfex: bool,
+    account: address
+) -> uint256:
     self.protect()
+
+    assert msg.sender == account or self.isAuthorized[account][msg.sender] == True, "Account not authorized"
     assert _totalMarginAmount > 0 and _borrowAmount > 0, "Input amounts must be greater than 0"
-    assert _borrowAmount <= self.maxBorrowAmount, "_borrowAmount is greater than maxBorrowAmount"
+
+    if block.number != self.lastBorrowBlock:
+        self.lastBorrowBlock = block.number
+        self.currentBlockBorrows = 0
+
+    self.currentBlockBorrows += _borrowAmount
+    assert self.currentBlockBorrows <= self.mulTruncate(self.totalBorrowed + self.totalReserved, self.maxBorrowAmountRate), "currentBlockBorrows is greater than max borrow amount"
 
     self.accrueInterest()
     
@@ -320,12 +349,12 @@ def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256, minCol
 
     collateralAmount: uint256 = SwapExchange(self.swapExchange).swap(self.assetToken, _borrowAmount + assetInitialMargin, self, minCollateralAmount, maxCollateralAmount, deadline, ZERO_ADDRESS, useIfex)
 
-    new_position: Position = self.account_to_position[msg.sender]
+    new_position: Position = self.account_to_position[account]
     new_position.maintenanceMargin += assetMaintenanceMargin # Asset token
     new_position.collateralAmount += collateralAmount # Collateral token
     new_position.borrowedAmount += _borrowAmount + self.accruePositionInterest(new_position.borrowedAmount, new_position.lastInterestIndex) # Asset token
     new_position.lastInterestIndex = self.interestIndex
-    self.account_to_position[msg.sender] = new_position
+    self.account_to_position[account] = new_position
 
     immediateLiquidationAmount: uint256 = SwapExchange(self.swapExchange).getInputToOutputAmount(self.collateralToken, collateralAmount)
     assert immediateLiquidationAmount > _borrowAmount, "Liquidation would result in instant loss"
@@ -335,11 +364,11 @@ def increasePosition(_totalMarginAmount: uint256, _borrowAmount: uint256, minCol
 
     self.updateInterestRate()
 
-    log IncreasePosition(msg.sender, new_position.borrowedAmount, new_position.collateralAmount, new_position.maintenanceMargin)
+    log IncreasePosition(account, new_position.borrowedAmount, new_position.collateralAmount, new_position.maintenanceMargin)
     return new_position.collateralAmount
 
 @internal
-def _decreasePosition(_collateralTokenAmount: uint256, account: address, minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool):
+def _decreasePosition(_collateralTokenAmount: uint256, account: address, minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool, recipient: address):
     assert _collateralTokenAmount > 0, "_collateralTokenAmount must be greater than 0"
 
     self.accrueInterest()
@@ -351,8 +380,8 @@ def _decreasePosition(_collateralTokenAmount: uint256, account: address, minAsse
     assetTokenAmount: uint256 = SwapExchange(self.swapExchange).swap(self.collateralToken, _collateralTokenAmount, self,  minAssetAmount, maxAssetAmount, deadline, ZERO_ADDRESS, useIfex)
     if assetTokenAmount >= new_position.borrowedAmount:
         assetTokenProfit: uint256 = (assetTokenAmount - new_position.borrowedAmount) + new_position.maintenanceMargin
-        self.safeTransfer(self.assetToken, account, assetTokenProfit)
-        self.safeTransfer(self.collateralToken, account, new_position.collateralAmount - _collateralTokenAmount)
+        self.safeTransfer(self.assetToken, recipient, assetTokenProfit)
+        self.safeTransfer(self.collateralToken, recipient, new_position.collateralAmount - _collateralTokenAmount)
         self.totalReserved += new_position.borrowedAmount
         self.totalBorrowed = self.subOrDefault(self.totalBorrowed, new_position.borrowedAmount, 0)
         self.account_to_position[account] = empty(Position)
@@ -367,15 +396,18 @@ def _decreasePosition(_collateralTokenAmount: uint256, account: address, minAsse
     log DecreasePosition(account, new_position.borrowedAmount, new_position.collateralAmount, new_position.maintenanceMargin)
 
 @external
-def decreasePosition(_collateralTokenAmount: uint256, minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool):
+def decreasePosition(_collateralTokenAmount: uint256, minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool, account: address):
     self.protect()
-    self._decreasePosition(_collateralTokenAmount, msg.sender, minAssetAmount, maxAssetAmount, deadline, useIfex)
+    assert msg.sender == account or self.isAuthorized[account][msg.sender] == True, "Account not authorized"
+    self._decreasePosition(_collateralTokenAmount, account, minAssetAmount, maxAssetAmount, deadline, useIfex, msg.sender)
 
 @external
-def closePosition(minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool):
+def closePosition(minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool, account: address):
     self.protect()
-    position: Position = self.account_to_position[msg.sender]
-    self._decreasePosition(position.collateralAmount, msg.sender, minAssetAmount, maxAssetAmount, deadline, useIfex)
+    assert msg.sender == account or self.isAuthorized[account][msg.sender] == True, "Account not authorized"
+
+    position: Position = self.account_to_position[account]
+    self._decreasePosition(position.collateralAmount, account, minAssetAmount, maxAssetAmount, deadline, useIfex, msg.sender)
 
 @external
 def liquidatePosition(account: address):
@@ -391,11 +423,11 @@ def liquidatePosition(account: address):
         liquidationAmount = SwapExchange(self.swapExchange).swap(self.collateralToken, position.collateralAmount, self, 0, 0, 0, ZERO_ADDRESS, False)
         assert liquidationAmount <= position.borrowedAmount, "Position has sufficient collateral"
 
-    assert self.liquidateVolume <= self.maxLiquidateVolume or block.number != self.lastLiquidateBlock, "Too many liquidations in this block"
+    assert self.currentBlockLiquidations <= self.mulTruncate(self.totalReserved + self.totalBorrowed, self.maxLiquidateVolumeRate) or block.number != self.lastLiquidateBlock, "Too many liquidations in this block"
     if block.number != self.lastLiquidateBlock:
         self.lastLiquidateBlock = block.number
-        self.liquidateVolume = 0
-    self.liquidateVolume += position.borrowedAmount
+        self.currentBlockLiquidations = 0
+    self.currentBlockLiquidations += position.borrowedAmount
 
     remainingDebt: uint256 = position.borrowedAmount - liquidationAmount
     if remainingDebt > position.maintenanceMargin:
@@ -431,8 +463,8 @@ def liquidatePosition(account: address):
 INITIAL_MARGIN_PROPOSAL: constant(uint256) = 1
 MAINTENANCE_MARGIN_PROPOSAL: constant(uint256) = 2
 INTEREST_MULTIPLIER_PROPOSAL: constant(uint256) = 3
-MAX_BORROW_AMOUNT_PROPOSAL: constant(uint256) = 4
-MAX_LIQUIDATE_VOLUME_PROPOSAL: constant(uint256) = 5
+MAX_BORROW_AMOUNT_RATE_PROPOSAL: constant(uint256) = 4
+MAX_LIQUIDATE_VOLUME_RATE_PROPOSAL: constant(uint256) = 5
 VOTING_DURATION_PROPOSAL: constant(uint256) = 6
 
 # Proposal options
@@ -519,10 +551,10 @@ MAX_MAINTENANCE_MARGIN_RATE: constant(uint256) = ONE * 10
 MIN_MAINTENANCE_MARGIN_RATE: constant(uint256) = ONE * 1 / 1000 # 0.2% - Allows 500x leverage (This better be sufficient!)
 MAX_INTEREST_MULTIPLIER_RATE: constant(uint256) = ONE * 10
 MIN_INTEREST_MULTIPLIER_RATE: constant(uint256) = ONE * 1 / 1000
-MAX_MAX_BORROW_AMOUNT: constant(uint256) = MAX_UINT256 / 10 ** 12
-MIN_MAX_BORROW_AMOUNT: constant(uint256) = 100
-MAX_MAX_LIQUIDATE_VOLUME: constant(uint256) = MAX_UINT256
-MIN_MAX_LIQUIDATE_VOLUME: constant(uint256) = 1_000_000_000
+MAX_MAX_BORROW_AMOUNT_RATE: constant(uint256) = ONE * 90 / 100 # 90%
+MIN_MAX_BORROW_AMOUNT_RATE: constant(uint256) = ONE * 1 / 1000 # 0.1%
+MAX_MAX_LIQUIDATE_VOLUME_RATE: constant(uint256) = ONE * 90 / 100
+MIN_MAX_LIQUIDATE_VOLUME_RATE: constant(uint256) = ONE * 1 / 1000 # 0.1%
 MAX_VOTING_DURATION: constant(uint256) = DAY * 14
 MIN_VOTING_DURATION: constant(uint256) = DAY / 2 # 12 hours - just in case of some NTP server consensus error or such.
 
@@ -545,10 +577,10 @@ def finalizeVote(proposalId: uint256):
             self.maintenanceMarginRate += self.maintenanceMarginRate * 5 / 100
         elif proposalId == INTEREST_MULTIPLIER_PROPOSAL and self.interestMultiplier < MAX_INTEREST_MULTIPLIER_RATE:
             self.interestMultiplier += self.interestMultiplier * 5 / 100
-        elif proposalId == MAX_BORROW_AMOUNT_PROPOSAL and self.maxBorrowAmount < MAX_MAX_BORROW_AMOUNT:
-            self.maxBorrowAmount += self.maxBorrowAmount * 20 / 100
-        elif proposalId == MAX_LIQUIDATE_VOLUME_PROPOSAL and self.maxLiquidateVolume < MAX_MAX_LIQUIDATE_VOLUME:
-            self.maxLiquidateVolume += self.maxLiquidateVolume * 30 / 100
+        elif proposalId == MAX_BORROW_AMOUNT_RATE_PROPOSAL and self.maxBorrowAmountRate < MAX_MAX_BORROW_AMOUNT_RATE:
+            self.maxBorrowAmountRate += self.maxBorrowAmountRate * 10 / 100
+        elif proposalId == MAX_LIQUIDATE_VOLUME_RATE_PROPOSAL and self.maxLiquidateVolumeRate < MAX_MAX_LIQUIDATE_VOLUME_RATE:
+            self.maxLiquidateVolumeRate += self.maxLiquidateVolumeRate * 10 / 100
         elif proposalId == VOTING_DURATION_PROPOSAL and self.votingDuration < MAX_VOTING_DURATION:
             self.votingDuration += self.votingDuration * 15 / 100
     if winningOption == DOWN_OPTION:
@@ -558,10 +590,10 @@ def finalizeVote(proposalId: uint256):
             self.maintenanceMarginRate -= self.maintenanceMarginRate * 5 / 100
         elif proposalId == INTEREST_MULTIPLIER_PROPOSAL and self.interestMultiplier > MIN_INTEREST_MULTIPLIER_RATE:
             self.interestMultiplier -= self.interestMultiplier * 5 / 100
-        elif proposalId == MAX_BORROW_AMOUNT_PROPOSAL and self.maxBorrowAmount > MIN_MAX_BORROW_AMOUNT:
-            self.maxBorrowAmount -= self.maxBorrowAmount * 20 / 100
-        elif proposalId == MAX_LIQUIDATE_VOLUME_PROPOSAL and self.maxLiquidateVolume > MIN_MAX_LIQUIDATE_VOLUME:
-            self.maxLiquidateVolume -= self.maxLiquidateVolume * 30 / 100
+        elif proposalId == MAX_BORROW_AMOUNT_RATE_PROPOSAL and self.maxBorrowAmountRate > MIN_MAX_BORROW_AMOUNT_RATE:
+            self.maxBorrowAmountRate -= self.maxBorrowAmountRate * 10 / 100
+        elif proposalId == MAX_LIQUIDATE_VOLUME_RATE_PROPOSAL and self.maxLiquidateVolumeRate > MIN_MAX_LIQUIDATE_VOLUME_RATE:
+            self.maxLiquidateVolumeRate -= self.maxLiquidateVolumeRate * 10 / 100
         elif proposalId == VOTING_DURATION_PROPOSAL and self.votingDuration > MIN_VOTING_DURATION:
             self.votingDuration -= self.votingDuration * 15 / 100
 

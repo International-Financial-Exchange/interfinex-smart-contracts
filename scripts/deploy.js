@@ -75,7 +75,7 @@ const swapContracts = async (templateDividendERC20Contract, ifexTokenContract, w
     return { swapFactoryContract, swapEthRouterContract };
 };
 
-const marginContracts = async (templateDividendERC20Contract, ifexTokenContract, swapFactoryContract) => {
+const marginContracts = async (templateDividendERC20Contract, ifexTokenContract, swapFactoryContract, wrappedEtherContract) => {
     console.log("");
     const templateMarginMarketContract = await tracked.deploy("MarginMarket", "templateMarginMarket", RESET);
     console.log(`🚜 Deployed template MarginMarket contract`);
@@ -90,7 +90,15 @@ const marginContracts = async (templateDividendERC20Contract, ifexTokenContract,
     );
     console.log(`🚜 Deployed and Initialized MarginFactory contract`);
 
-    return { marginFactoryContract };
+    const marginEthRouterContract = await tracked.deploy("MarginEthRouter", "MarginEthRouter", RESET);
+    await marginEthRouterContract.initialize(
+        wrappedEtherContract.address, 
+        marginFactoryContract.address, 
+    );
+    console.log(`🚜 Deployed and Initialized MarginEthRouter contract`);
+
+
+    return { marginFactoryContract, marginEthRouterContract };
 };
 
 const deploy = {
@@ -107,8 +115,8 @@ async function main() {
 
     const { tokens, templateDividendERC20Contract, ifexTokenContract } = await deploy.tokenContracts();
     const { wrappedEtherContract } = await deploy.wrappedEtherContract();
-    const { swapFactoryContract } = await deploy.swapContracts(templateDividendERC20Contract, ifexTokenContract, wrappedEtherContract);
-    const { marginFactoryContract } = await deploy.marginContracts(templateDividendERC20Contract, ifexTokenContract, swapFactoryContract);
+    const { swapFactoryContract, swapEthRouterContract } = await deploy.swapContracts(templateDividendERC20Contract, ifexTokenContract, wrappedEtherContract);
+    const { marginFactoryContract, marginEthRouterContract } = await deploy.marginContracts(templateDividendERC20Contract, ifexTokenContract, swapFactoryContract, wrappedEtherContract);
 };
 
 main()
