@@ -413,6 +413,7 @@ def closePosition(minAssetAmount: uint256, maxAssetAmount: uint256, deadline: ui
 def liquidatePosition(account: address):
     self.protect()
     self.accrueInterest()
+    assert msg.sender == tx.origin
     
     position: Position = self.account_to_position[account]
     position.borrowedAmount += self.accruePositionInterest(position.borrowedAmount, position.lastInterestIndex)

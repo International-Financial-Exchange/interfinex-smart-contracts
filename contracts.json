@@ -2,155 +2,161 @@
     "localhost": {
         "Token0": {
             "name": "Token0",
-            "address": "0x7c4D072293651Df0BF274A454F4C3EC70fc5A866",
+            "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
             "artifactName": "ERC20",
-            "deploymentTransactionHash": "0x717b7cbba3779ea69c49bd77590b50a63c930237c7812986fa78fd3989117ace"
+            "deploymentTransactionHash": "0x53343041a0474a5cb70a4425d56205d4f54dfbd38194d0c47d05799c24c3ef02"
         },
         "Token1": {
             "name": "Token1",
-            "address": "0xBc1065371D4c6FD32C12f35241793557bd3D85B9",
+            "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
             "artifactName": "ERC20",
-            "deploymentTransactionHash": "0x5d4ccc41d8385857f7a6f043e43a54a5e2ec9e72aa29507dfc707201c5b97e6b"
+            "deploymentTransactionHash": "0x1d806b4f713b30f3d5fc96473f96959896c71b6765daafc7c60efd265d1914b0"
         },
         "Token2": {
             "name": "Token2",
-            "address": "0xCc66f9A3cA2670972938FAD91d0865c4a62DFB25",
+            "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
             "artifactName": "ERC20",
-            "deploymentTransactionHash": "0xcad7c821da75550a22a7002cc13719acb98435f5010d7012579edc020b70a214"
+            "deploymentTransactionHash": "0x36e76358a137a1d467e038170d57e1def16eed9eddbaa00c54b0d4ea4c89d406"
         },
         "Token3": {
             "name": "Token3",
-            "address": "0xe082678eCF749982e33Ea6839852a8cd989aEDE2",
+            "address": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
             "artifactName": "ERC20",
-            "deploymentTransactionHash": "0xc94010cb57f166f293772090c2057fd5136782bdb9e96ba9ca10152561fd09a0"
+            "deploymentTransactionHash": "0xee781024db631052c3efc74d333f2199b49bd5c989cbf27c27e9d74445f6099f"
         },
         "TemplateDividendERC20": {
             "name": "TemplateDividendERC20",
-            "address": "0x1eC5DF6299467Fb19b4e425eb47DF46C8f245078",
+            "address": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6",
             "artifactName": "DividendERC20",
-            "deploymentTransactionHash": "0x83496d0ef5930ca73e89790248d2d172fe48f0ea2ffca5e4f7ee18af36ff5d4b"
+            "deploymentTransactionHash": "0x4a3543244fac4623b88f5fb8ace79a4ef3fc42e93d60afc89c442f718b0e7852"
         },
         "IfexToken": {
             "name": "IfexToken",
-            "address": "0x380de6769c9ECC5e8D032F8a3904bF17DC852cA5",
+            "address": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
             "artifactName": "DividendERC20",
-            "deploymentTransactionHash": "0xce247364cc9413bcf772b728aacb795fa51a3ab35a2b985a6752eaca38ca310b"
+            "deploymentTransactionHash": "0x192fb98878d247ecb4443ae73aca47d57339eb017aba2ed7dab80ab4b231a1b3"
         },
         "TemplateSwapExchange": {
             "name": "TemplateSwapExchange",
-            "address": "0x7B3754E8aF59Cf676ad123c8A2643f6c77E50C4A",
+            "address": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
             "artifactName": "SwapExchange",
-            "deploymentTransactionHash": "0x1bfdc6fc6118b2744dc5c061d9fc6109dd86263dfa04519c417ffd93a35ff7fa"
+            "deploymentTransactionHash": "0x3f465043a86028949e93e856661daafd584c41cf519eba1364dd3fdf7bf2456f"
         },
         "SwapFactory": {
             "name": "SwapFactory",
-            "address": "0x1De7Ec43eebaA526D0cF71B048B6E01BD8cfd51A",
+            "address": "0x9A676e781A523b5d0C0e43731313A708CB607508",
             "artifactName": "SwapFactory",
-            "deploymentTransactionHash": "0xc50f3e733c33012ef2311d01738412c941bcb48824f3a0d99fbcf1aed5d39baa"
+            "deploymentTransactionHash": "0xfc4faa9a6325c17df851a65ad0e2e7a27e1143fcf33871c5822336b21ba94e76"
         },
         "MarginFactory": {
             "name": "MarginFactory",
-            "address": "0x7543972Be5497AF54bab4fDe333Ffa53b5C52cF2",
+            "address": "0x3Aa5ebB10DC797CAC828524e59A333d0A371443c",
             "artifactName": "MarginFactory",
-            "deploymentTransactionHash": "0x146d1f9a9170a0382e23b772052634511679ca12bd2f46afbfd623f4b5b3ef0e"
+            "deploymentTransactionHash": "0x4118706708702674be873257349ff4594bbe5ce6e11b92e2000151414a7259d5"
         },
         "WrappedEther": {
             "name": "WrappedEther",
-            "address": "0xbca08355Bcc24B2Be996c24c0D2f1829D6752630",
+            "address": "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e",
             "artifactName": "WrappedEther",
-            "deploymentTransactionHash": "0xdf4a7ec6e420923e5c1c79a6bdeedb6d28fe43e82b0167bb8f2c7f95de6a354d"
+            "deploymentTransactionHash": "0x92b0cb9fc7e3e72a154caf0311891079ddf84f0eb5c704e097be146d1461d3be"
         },
         "SwapEthRouter": {
             "name": "SwapEthRouter",
-            "address": "0x909B91a21d0F86709C4eec651E82A4eFB028C330",
+            "address": "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
             "artifactName": "SwapEthRouter",
-            "deploymentTransactionHash": "0xeb0d4ac9b52fd2283592f0c8ca939fda9e72b1efbda5a399e19942ae10af04d6"
+            "deploymentTransactionHash": "0x1ed519a84281cc3673285bc8ee2d6070120ab96af80a98702776478333538aba"
         },
         "templateMarginMarket": {
             "name": "templateMarginMarket",
-            "address": "0x26a5BE39521F8e70fEfe14dB40043De82B5B7784",
+            "address": "0x68B1D87F95878fE05B998F19b66F4baba5De1aed",
             "artifactName": "MarginMarket",
-            "deploymentTransactionHash": "0xa8caea994a163462cb67b50da5231ff2ee5dd5c2184c5400d8c72a02f9d749d2"
+            "deploymentTransactionHash": "0x2195db69740d3931bfbf8bf5f66655d9d1c4406fed0ef2fd2a8ab8381714dd6f"
         },
         "MarginEthRouter": {
             "name": "MarginEthRouter",
-            "address": "0xd7Db0384564b62543BE8E371e7337A3400F4CCEA",
+            "address": "0x59b670e9fA9D0A427751Af201D676719a970857b",
             "artifactName": "MarginEthRouter",
-            "deploymentTransactionHash": "0xe5f830c00914c793b38ab76cab17dc6f02c696e8f84db4b1ba5aea46844394b1"
+            "deploymentTransactionHash": "0x6e6c3f7c8f668277f44f2c135487692d6792d8a7c736ab49a5df5f9fdd8c5e9a"
         }
     },
     "ganache": {
         "Token0": {
             "name": "Token0",
-            "address": "0x07b7C5a116b818C0492ca36d4969697f7B6F8e42",
+            "address": "0x9B2EfA0E45034ab6A7701e121837baE65d9A92A3",
             "artifactName": "ERC20",
-            "deploymentTransactionHash": "0x08d72b7588755a41cc42e119051e7c06357e79d75757993b847e3c8a6243ca97"
+            "deploymentTransactionHash": "0x5b69e27f049b79cbd01cac80bc0ced5d8ad3b37db7b9be053384fdfc5a97b4be"
         },
         "Token1": {
             "name": "Token1",
-            "address": "0xB17DeB076EaC78E7CBfCd88Af7a56C252F344bd7",
+            "address": "0x1b9a88A4bcFae6Be48637b74e49eA844Ec8F0CbF",
             "artifactName": "ERC20",
-            "deploymentTransactionHash": "0x52ac44a4a8f67aa55b39345c9f89ee1df64ab2479354e4486b7d8bcf34fd1036"
+            "deploymentTransactionHash": "0x43becc83fc6d78659346f6b97eafe4f93514cd5c7b6a1cdaced32c5db482e30a"
         },
         "Token2": {
             "name": "Token2",
-            "address": "0xae2A4D857aC0576C0cA786fE9368BD0d9B13063e",
+            "address": "0x360aA5ed1E317CF1b2f1dC9dDff9eAc87D4f109F",
             "artifactName": "ERC20",
-            "deploymentTransactionHash": "0x41141f25e57b769b019e3b74825058742db525b8c60432c85ee668d0b5170bc5"
+            "deploymentTransactionHash": "0x72d1f28186e49256b9a7e1a1623528b3d88595042e24b8c8ed800284b3cb9e5e"
         },
         "Token3": {
             "name": "Token3",
-            "address": "0x78B2f544D7F77faf28B9276A38060E2979a1f64e",
+            "address": "0x8914f89ca69b0DEF50B9c3841407aC5cA44D0a96",
             "artifactName": "ERC20",
-            "deploymentTransactionHash": "0x1fd4eb14f70558155b824842f2445dc0babcb529919262c6353a0495ae9f90dd"
+            "deploymentTransactionHash": "0x95432102a184248f4ab2c2b662e63a3b4198ef670135495fa67d2110fadb3aec"
         },
         "TemplateDividendERC20": {
             "name": "TemplateDividendERC20",
-            "address": "0xD7cd5a43670a604Fd166C2076690403D5371017e",
+            "address": "0x2D5e35C9bb1Ab5B2ea40566440744F828A952b60",
             "artifactName": "DividendERC20",
-            "deploymentTransactionHash": "0x3305e23444bd6371111008996140e69d34ef895e79ebc73daee455ed76dc01a7"
+            "deploymentTransactionHash": "0xfb195f49994218a49f5d385cd214b1125bb50398cb631e2bc4c88b73ae79b6f5"
         },
         "IfexToken": {
             "name": "IfexToken",
-            "address": "0x3e9e2a7fd51CF81a5c6cd01db922Ce416831eb93",
+            "address": "0x6FD72BAB03b082a33AA2170E3662110177e5b31f",
             "artifactName": "DividendERC20",
-            "deploymentTransactionHash": "0x58b123c1ae700c393bfa474a0cd4c5943b1d411e811225ef157d223292d23a1a"
+            "deploymentTransactionHash": "0x2a0e8171c681f1c93e2aa9ee46096c44e277ddea77148ccfbbeae27e8b755851"
         },
         "TemplateSwapExchange": {
             "name": "TemplateSwapExchange",
-            "address": "0x6C2c173ae2e9438a66A21bC6C17B9FF5ee3f0925",
+            "address": "0x790D48Cce9A0399471cF965D70A7E442FACf96a0",
             "artifactName": "SwapExchange",
-            "deploymentTransactionHash": "0xc94165d3779ce7c7777bb8e04b0a145877f0d11d314875dc79917ccc239604e1"
+            "deploymentTransactionHash": "0xdbd918136cb7fa97f291ada073df984a0a8ec7ae6092ce57d8a8c4d06c1d78d4"
         },
         "SwapFactory": {
             "name": "SwapFactory",
-            "address": "0x981cC333D8cafb8165BeDDd50e6f7D10c97a0574",
+            "address": "0x3015649248498612B5E3cB575b053b478D8fc7c0",
             "artifactName": "SwapFactory",
-            "deploymentTransactionHash": "0x981ea6104126b6c12f48bb4778d0d395fd0a82596e0463c61098df7715863e1e"
+            "deploymentTransactionHash": "0xc0e3a46c7803026ec34a6fff72c4195518732a7243b06d53caced5d29f310baf"
         },
         "templateMarginMarket": {
             "name": "templateMarginMarket",
-            "address": "0x053381cb116617C442CfacD5A7245AaEA6ccc527",
+            "address": "0xc8f76E4fB073880f5470b50A9284746d91b7c3aE",
             "artifactName": "MarginMarket",
-            "deploymentTransactionHash": "0x687a3336ef50828d52ab4d1276a453e973ad89376147dc0377f0a0173192f542"
+            "deploymentTransactionHash": "0x1e3c8b3ec7aa6f9a1cbcda49324ac04d35ba3bcb0b4bf9979a087af5b4c1a0a7"
         },
         "MarginFactory": {
             "name": "MarginFactory",
-            "address": "0xA69cf7666FF5DC93603e6f98537A7Da4c17b9e03",
+            "address": "0x68A181eD1a498252730A67A0DcF6E0cD818ad42A",
             "artifactName": "MarginFactory",
-            "deploymentTransactionHash": "0xbc65934a1bb41b02f7d2628684d29e0872a01e4d82adba118c1a5bf76a8000eb"
+            "deploymentTransactionHash": "0x768a66f15d27cea854899bc5bff3e43d12f1afd557d85b4496ec27fcf9abf241"
         },
         "WrappedEther": {
             "name": "WrappedEther",
-            "address": "0x85198c3DA5337Bd09b8aCC65148b5EE5aFb3a1b2",
+            "address": "0x3BaB514cB984BCb8c7D63B4Bb9ddD41236807a8c",
             "artifactName": "WrappedEther",
-            "deploymentTransactionHash": "0xfca0288bd946a83e0802828f86ad7a987f7adabdabe9c2707752ce4229273d1e"
+            "deploymentTransactionHash": "0xc0525ef5975a8a22e2b85e1c6d23460eeb3e6280eea934c39a66308ea89ab6d6"
         },
         "SwapEthRouter": {
             "name": "SwapEthRouter",
-            "address": "0x97100557c34de3a7564dA40250AcD7Fac82163bB",
+            "address": "0x48bB8C52295989BfDC52Fd301586cedA5e356f71",
             "artifactName": "SwapEthRouter",
-            "deploymentTransactionHash": "0x42b66cb1403630faa578c715d8b046cd0e3db6c89d8f98c6671ebc75e6abf69f"
+            "deploymentTransactionHash": "0x3ff98edd8cbc042209bf8bed52578eca21f9605233800b5bf9e3b84a03239db0"
+        },
+        "MarginEthRouter": {
+            "name": "MarginEthRouter",
+            "address": "0x6540349700c7DB9615abd982a906B66C8415CF0d",
+            "artifactName": "MarginEthRouter",
+            "deploymentTransactionHash": "0x9097a6da5dc0b0308ee25335196d00e3b561c978d5657418cf024c3892ec70aa"
         }
     },
     "hardhat": {
