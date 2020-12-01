@@ -1,4 +1,4 @@
-const { ethers } = require("hardhat");
+const { ethers, hardhatArguments } = require("hardhat");
 
 const { parseEther } = ethers.utils;
 const ONE = ethers.utils.parseEther("1");
@@ -19,86 +19,111 @@ const initializeArtifacts = async () => {
 const tokenContracts = async () =>  {
     console.log("");
 
-    const tokens = [];
-    for (i in new Array(4).fill()) {
-        const tokenContract = await tracked.deploy("ERC20", `Token${i}`, RESET);
-        await tokenContract.initializeERC20(`token${i}`, `${i}`, 18, 2100000000, true);
-        tokens.push(tokenContract);
-    }
+    // const tokens = [];
+    // for (i in new Array(4).fill()) {
+    //     const tokenContract = await tracked.deploy("ERC20", `Token${i}`, RESET);
+    //     await tokenContract.initializeERC20(`token${i}`, `${i}`, 18, 2100000000, true);
+    //     tokens.push(tokenContract);
+    // }
 
-    console.log(`🚜 Deployed ${tokens.length} testnet ERC20 token contracts`);
+    // console.log(`🚜 Deployed ${tokens.length} testnet ERC20 token contracts`);
 
     const templateDividendERC20Contract = await tracked.deploy("DividendERC20", "TemplateDividendERC20", RESET);
     console.log(`🚜 Deployed template DividendERC20 contract`);
 
-    const ifexTokenContract = await tracked.deploy("DividendERC20", "IfexToken", RESET);
-    await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, 2100000000, ifexTokenContract.address, false);
-    console.log(`🚜 Deployed testnet IFEX token contract`);
+    // const ifexTokenContract = await tracked.deploy("DividendERC20", "IfexToken", RESET);
+    // await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, 2100000000, ifexTokenContract.address, false);
+    // console.log(`🚜 Deployed testnet IFEX token contract`);
 
-    return { tokens, templateDividendERC20Contract, ifexTokenContract };
+    // return { tokens, templateDividendERC20Contract, ifexTokenContract };
 };
 
 const wrappedEtherContract = async () => {
     console.log("");
 
     const wrappedEtherContract = await tracked.deploy("WrappedEther", `WrappedEther`, RESET);
-    await wrappedEtherContract.deposit({ value: parseEther("100") });
+    await wrappedEtherContract.deposit({ value: parseEther("0.1") });
 
     console.log(`🚜 Deployed Wrapped Ether contract`);
 
     return { wrappedEtherContract };
 };
 
-const swapContracts = async (templateDividendERC20Contract, ifexTokenContract, wrappedEtherContract)  => {
+const swapContracts = async () => {
     console.log("");
     const templateSwapExchangeContract = await tracked.deploy("SwapExchange", "TemplateSwapExchange", RESET);
-    console.log(`🚜 Deployed template SwapExchange contract`);
+    console.log(`🚜 Deployed template SwapExchange contract: ${templateSwapExchangeContract.address}`);
 
     const swapFactoryContract = await tracked.deploy("SwapFactory", "SwapFactory", RESET);
 
+    const { 
+        IfexToken, 
+        TemplateDividendERC20, 
+        TemplateSwapExchange,
+        WrappedEther 
+    } = tracked.contracts[hre.network.name];
+
     await swapFactoryContract.initialize_factory(
         parseEther("0.001"), 
-        templateSwapExchangeContract.address, 
-        templateDividendERC20Contract.address,
-        ifexTokenContract.address
+        TemplateSwapExchange.address, 
+        TemplateDividendERC20.address,
+        IfexToken.address
     );
-    console.log(`🚜 Deployed and Initialized SwapFactory contract`);
+    console.log(`🚜 Deployed and Initialized SwapFactory contract: ${swapFactoryContract.address}`);
 
     const swapEthRouterContract = await tracked.deploy("SwapEthRouter", "SwapEthRouter", RESET);
     await swapEthRouterContract.initialize(
-        wrappedEtherContract.address, 
+        WrappedEther.address, 
         swapFactoryContract.address, 
-        ifexTokenContract.address
+        IfexToken.address
     );
-    console.log(`🚜 Deployed and Initialized SwapEthRouter contract`);
+    console.log(`🚜 Deployed and Initialized SwapEthRouter contract: ${swapEthRouterContract.address}`);
 
     return { swapFactoryContract, swapEthRouterContract };
 };
 
-const marginContracts = async (templateDividendERC20Contract, ifexTokenContract, swapFactoryContract, wrappedEtherContract) => {
+const marginContracts = async () => {
     console.log("");
     const templateMarginMarketContract = await tracked.deploy("MarginMarket", "templateMarginMarket", RESET);
-    console.log(`🚜 Deployed template MarginMarket contract`);
+    console.log(`🚜 Deployed template MarginMarket contract: ${templateMarginMarketContract.address}`);
     
     const marginFactoryContract = await tracked.deploy("MarginFactory", "MarginFactory", RESET);
 
+    const {
+        TemplateDividendERC20,
+        IfexToken,
+        SwapFactory,
+        WrappedEther,
+    } = tracked.contracts[hre.network.name];
+
     await marginFactoryContract.initialize(
         templateMarginMarketContract.address, 
-        templateDividendERC20Contract.address, 
-        ifexTokenContract.address,
-        swapFactoryContract.address
+        TemplateDividendERC20.address, 
+        IfexToken.address,
+        SwapFactory.address
     );
-    console.log(`🚜 Deployed and Initialized MarginFactory contract`);
+    console.log(`🚜 Deployed and Initialized MarginFactory contract: ${marginFactoryContract.address}`);
 
     const marginEthRouterContract = await tracked.deploy("MarginEthRouter", "MarginEthRouter", RESET);
     await marginEthRouterContract.initialize(
-        wrappedEtherContract.address, 
+        WrappedEther.address, 
         marginFactoryContract.address, 
     );
-    console.log(`🚜 Deployed and Initialized MarginEthRouter contract`);
+    console.log(`🚜 Deployed and Initialized MarginEthRouter contract: ${marginEthRouterContract.address}`);
 
 
     return { marginFactoryContract, marginEthRouterContract };
+};
+
+const yieldFarmContract = async () => {
+    console.log("");
+
+    const yieldFarmContract = await tracked.deploy("YieldFarm", "YieldFarm", RESET);
+    const { IfexToken } = tracked.contracts[hre.network.name];
+    await yieldFarmContract.initialize(IfexToken.address,);
+    console.log(`🚜 Deployed and Initialized YieldFarm contract: ${yieldFarmContract.address}`);
+
+    return { yieldFarmContract };
 };
 
 const deploy = {
@@ -106,6 +131,7 @@ const deploy = {
     swapContracts,
     marginContracts,
     wrappedEtherContract,
+    yieldFarmContract,
 }
 
 async function main() {
@@ -113,10 +139,11 @@ async function main() {
 
     console.log("\n🚀 Starting Deployment");
 
-    const { tokens, templateDividendERC20Contract, ifexTokenContract } = await deploy.tokenContracts();
-    const { wrappedEtherContract } = await deploy.wrappedEtherContract();
-    const { swapFactoryContract, swapEthRouterContract } = await deploy.swapContracts(templateDividendERC20Contract, ifexTokenContract, wrappedEtherContract);
-    const { marginFactoryContract, marginEthRouterContract } = await deploy.marginContracts(templateDividendERC20Contract, ifexTokenContract, swapFactoryContract, wrappedEtherContract);
+    await deploy.tokenContracts();
+    // await deploy.wrappedEtherContract();
+    await deploy.swapContracts();
+    await deploy.marginContracts();
+    await deploy.yieldFarmContract();
 };
 
 main()

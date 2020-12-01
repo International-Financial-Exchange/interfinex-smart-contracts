@@ -76,6 +76,23 @@ def safeTransfer(_token: address, _to: address, _value: uint256) -> bool:
     return True
 
 @internal
+def safeApprove(_token: address, _spender: address, _value: uint256) -> bool:
+    _response: Bytes[32] = raw_call(
+        _token,
+        concat(
+            method_id("approve(address,uint256)"),
+            convert(_spender, bytes32),
+            convert(_value, bytes32)
+        ),
+        max_outsize=32
+    )
+
+    if len(_response) > 0:
+        assert convert(_response, bool), "Token approval failed!"
+
+    return True
+
+@internal
 @view
 def subOrDefault(a: uint256, b: uint256, defaultValue: uint256) -> uint256:
     if b > a:
@@ -184,12 +201,12 @@ def initialize(_assetToken: address, _collateralToken: address, _dividendERC20Te
     self.swapFactory = _swapFactory
     self.swapExchange = SwapFactory(_swapFactory).pair_to_exchange(_assetToken, _collateralToken)
     assert self.swapExchange != ZERO_ADDRESS, "Swap market does not exist for this pair"
-    ERC20(_assetToken).approve(self.swapExchange, MAX_UINT256)
-    ERC20(_collateralToken).approve(self.swapExchange, MAX_UINT256)
-    ERC20(_assetToken).approve(self.assetIfexSwapExchange, MAX_UINT256)
-    ERC20(_collateralToken).approve(self.assetIfexSwapExchange, MAX_UINT256)
-    ERC20(_ifexToken).approve(_ifexToken, MAX_UINT256)
-    self.maintenanceMarginRate = ONE * 15 / 100 # 30%
+    self.safeApprove(_assetToken, self.swapExchange, MAX_UINT256)
+    self.safeApprove(_collateralToken, self.swapExchange, MAX_UINT256)
+    if self.assetIfexSwapExchange != self.swapExchange:
+        self.safeApprove(_assetToken, self.assetIfexSwapExchange, MAX_UINT256)
+    self.safeApprove(_ifexToken, _ifexToken, MAX_UINT256)
+    self.maintenanceMarginRate = ONE * 15 / 100 # 15%
     self.minInitialMarginRate = ONE * 50 / 100 # 50% - Start at 2x leverage - definitely sufficient for shitcoins lmao
     self.maxBorrowAmountRate = ONE * 50 / 100 # 50%
     self.votingDuration = DAY * 3
@@ -205,7 +222,7 @@ def _pureAccrueInterest() -> (uint256, uint256):
 
     accumulatedInterest: uint256 = blockDelta * self.interestRate
     if accumulatedInterest > 0 and self.totalBorrowed > 0: # No need to accumulate if values are 0
-        return (self.totalBorrowed + self.mulTruncate(self.totalBorrowed, accumulatedInterest), self.interestIndex + self.mulTruncate(self.interestIndex, accumulatedInterest))
+        return (self.totalBorrowed + self.mulTruncate(self.totalBorrowed, accumulatedInterest), self.interestIndex + self.mulTruncate(self.interestIndex, accumulatedInterest) + 1)
 
     return (self.totalBorrowed, self.interestIndex)
 
@@ -481,7 +498,7 @@ proposalVoteOptions: public(HashMap[uint256, uint256])
 proposalBaselineVote: public(HashMap[uint256, uint256])
 # proposal id -> block timestamp
 proposalFinalisationDate: public(HashMap[uint256, uint256])
-# user -> proposal id -> vote option -> weight
+# user -> proposal id -> weight
 userVotes: public(HashMap[address, HashMap[uint256, uint256]])
 # user -> proposal id -> block timestamp
 userLastVote: public(HashMap[address, HashMap[uint256, uint256]])
@@ -525,8 +542,6 @@ def withdrawVote(proposalId: uint256,):
 
     self._withdrawVote(proposalId, msg.sender)
 
-# lol... Git gud
-
 @internal
 @view
 def _getWinningOption(proposalId: uint256) -> (uint256, uint256): # returns (option, count)
@@ -549,8 +564,8 @@ def getWinningOption(proposalId: uint256) -> (uint256, uint256):
 MAX_INITIAL_MARGIN_RATE: constant(uint256) = ONE * 10
 MIN_INITIAL_MARGIN_RATE: constant(uint256) = ONE * 1 / 1000 # 0.1%
 MAX_MAINTENANCE_MARGIN_RATE: constant(uint256) = ONE * 10
-MIN_MAINTENANCE_MARGIN_RATE: constant(uint256) = ONE * 1 / 1000 # 0.2% - Allows 500x leverage (This better be sufficient!)
-MAX_INTEREST_MULTIPLIER_RATE: constant(uint256) = ONE * 10
+MIN_MAINTENANCE_MARGIN_RATE: constant(uint256) = ONE * 1 / 1000 # 0.1% - Allows 500x leverage incl. maintenance margin (This better be sufficient!)
+MAX_INTEREST_MULTIPLIER_RATE: constant(uint256) = ONE * 20
 MIN_INTEREST_MULTIPLIER_RATE: constant(uint256) = ONE * 1 / 1000
 MAX_MAX_BORROW_AMOUNT_RATE: constant(uint256) = ONE * 90 / 100 # 90%
 MIN_MAX_BORROW_AMOUNT_RATE: constant(uint256) = ONE * 1 / 1000 # 0.1%

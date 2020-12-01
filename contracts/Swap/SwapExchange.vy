@@ -31,7 +31,8 @@ interface Exchange:
         min_output_token_amount: uint256,
         max_output_token_amount: uint256,
         deadline: uint256,
-        referral: address
+        referral: address,
+        useIfex: bool,
     ) -> uint256: nonpayable
 
 interface Factory:
@@ -49,6 +50,7 @@ MIN_LIQUIDITY: constant(uint256) = 10 ** 3
 MULTIPLIER: constant(uint256) = 10 ** 18
 
 event MintLiquidity:
+    input_token: address
     base_token_amount: uint256
     asset_token_amount: uint256
     liquidity_tokens_minted: uint256
@@ -147,33 +149,45 @@ def initialize_exchange(
     return
 
 @external
-def mint_liquidity(base_token_amount: uint256, min_asset_token_amount: uint256, max_asset_token_amount: uint256, recipient: address, deadline: uint256):
-    assert base_token_amount > 0
+def mint_liquidity(
+    input_token: address,
+    input_token_amount: uint256, 
+    min_output_token_amount: uint256, 
+    max_output_token_amount: uint256, 
+    recipient: address, 
+    deadline: uint256
+):
+    assert input_token == self.base_token or input_token == self.asset_token, "Token does not exist"
+    assert input_token_amount > 0
     assert block.timestamp <= deadline or deadline == 0
 
-    base_token_balance: uint256 = ERC20(self.base_token).balanceOf(self)
-    asset_token_balance: uint256 = ERC20(self.asset_token).balanceOf(self)
+    output_token: address = self.asset_token
+    if input_token == self.asset_token:
+        output_token = self.base_token
+
+    input_token_balance: uint256 = ERC20(input_token).balanceOf(self)
+    output_token_balance: uint256 = ERC20(output_token).balanceOf(self)
     total_liquidity_token_balance: uint256 = ERC20(self.liquidity_token).totalSupply()
 
     # Initialisation case
     if total_liquidity_token_balance == 0:
-        assert base_token_amount > MIN_LIQUIDITY * 2
-        liquidity_tokens_minted: uint256 = base_token_amount
-        asset_token_amount: uint256 = min_asset_token_amount
-        self.safeTransferFrom(self.asset_token, msg.sender, self, asset_token_amount)
-        self.safeTransferFrom(self.base_token, msg.sender, self, base_token_amount)
+        assert input_token_amount > MIN_LIQUIDITY * 2
+        liquidity_tokens_minted: uint256 = input_token_amount
+        output_token_amount: uint256 = min_output_token_amount
+        self.safeTransferFrom(output_token, msg.sender, self, output_token_amount)
+        self.safeTransferFrom(input_token, msg.sender, self, input_token_amount)
         ERC20(self.liquidity_token).mint(self, liquidity_tokens_minted)
         ERC20(self.liquidity_token).transfer(recipient, liquidity_tokens_minted - MIN_LIQUIDITY)
-        log MintLiquidity(base_token_amount, asset_token_amount, liquidity_tokens_minted, msg.sender)
+        log MintLiquidity(input_token, input_token_amount, output_token_amount, liquidity_tokens_minted, msg.sender)
         return
 
-    liquidity_tokens_minted: uint256 = total_liquidity_token_balance * base_token_amount / base_token_balance 
-    asset_token_amount: uint256 = base_token_amount * asset_token_balance / base_token_balance
-    assert asset_token_amount >= min_asset_token_amount and asset_token_amount <= max_asset_token_amount
-    self.safeTransferFrom(self.asset_token, msg.sender, self, asset_token_amount)
-    self.safeTransferFrom(self.base_token, msg.sender, self, base_token_amount)
+    liquidity_tokens_minted: uint256 = total_liquidity_token_balance * input_token_amount / input_token_balance 
+    output_token_amount: uint256 = input_token_amount * output_token_balance / input_token_balance
+    assert output_token_amount >= min_output_token_amount and output_token_amount <= max_output_token_amount
+    self.safeTransferFrom(output_token, msg.sender, self, output_token_amount)
+    self.safeTransferFrom(input_token, msg.sender, self, input_token_amount)
     ERC20(self.liquidity_token).mint(recipient, liquidity_tokens_minted)
-    log MintLiquidity(base_token_amount, asset_token_amount, liquidity_tokens_minted, msg.sender)
+    log MintLiquidity(input_token, input_token_amount, output_token_amount, liquidity_tokens_minted, msg.sender)
 
 @external
 def burn_liquidity(liquidity_token_amount: uint256, deadline: uint256):
@@ -238,12 +252,16 @@ def swap(
 
     assert (output_token_amount >= min_output_token_amount and output_token_amount <= max_output_token_amount) or min_output_token_amount == 0, "Buying output_token amount is greater than slippage"
 
-    # TODO: Don't need two distributions or can set recipient to the swap function
     if self.base_token != self.ifex_token_contract and self.asset_token != self.ifex_token_contract and useIfex == True:
         input_token_ifex_token_exchange: address = Factory(self.factory_contract).pair_to_exchange(input_token, self.ifex_token_contract)
-        dividend: uint256 = Exchange(input_token_ifex_token_exchange).swap(input_token, input_token_fee / 10, self, 0, 0, 0, ZERO_ADDRESS)
-        DividendERC20(self.liquidity_token).distributeDividends(dividend * 10 / 100)
-        DividendERC20(self.ifex_token_contract).distributeDividends(dividend * 90 / 100)
+        Exchange(input_token_ifex_token_exchange).swap(
+            input_token, 
+            input_token_fee * 10 / 100, 
+            self.ifex_token_contract, 
+            0, 0, 0, 
+            ZERO_ADDRESS, 
+            False
+        )
 
     self.safeTransfer(output_token, recipient, output_token_amount)
 

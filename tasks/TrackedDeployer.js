@@ -24,6 +24,7 @@ extendEnvironment((hre) => {
     
             const contracts = JSON.parse(fs.readFileSync(CONTRACTS_FILE));
 
+            // const isDeployedToMainnet = contracts[NETWORK]?.[name] && NETWORK === "mainnet";
             if (!contracts[NETWORK] || !contracts[NETWORK][name] || reset) {
                 const contractFactory = await ethers.getContractFactory(artifactName);
                 contractInstance = await contractFactory.deploy();

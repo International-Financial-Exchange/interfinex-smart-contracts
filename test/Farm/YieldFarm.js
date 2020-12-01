@@ -36,7 +36,7 @@ describe("YieldFarm contract", function() {
     });
 
     it("Should add farm", async function() {
-        await yieldFarmContract.addFarm(token0.address, parseTokenAmount("100"));
+        await yieldFarmContract.addFarm(token0.address, parseTokenAmount("100"), 0);
         
         const expectedFarm = {
             yieldPerBlock: parseTokenAmount("100"),
@@ -51,7 +51,7 @@ describe("YieldFarm contract", function() {
     });
 
     it("Should delete farm", async function() {
-        await yieldFarmContract.addFarm(token0.address, parseTokenAmount("100"));
+        await yieldFarmContract.addFarm(token0.address, parseTokenAmount("100"), 0);
         await yieldFarmContract.deleteFarm(token0.address);
 
         const expectedFarm = { 
@@ -73,7 +73,7 @@ describe("YieldFarm contract", function() {
     });
 
     it("Should update farm", async function() {
-        await yieldFarmContract.addFarm(token0.address, parseTokenAmount("100"));
+        await yieldFarmContract.addFarm(token0.address, parseTokenAmount("100"), 0);
         await yieldFarmContract.updateFarm(token0.address, parseTokenAmount("150"));
 
         const expectedFarm = { 
@@ -98,7 +98,7 @@ describe("YieldFarm contract", function() {
         await ifexTokenContract.transfer(yieldFarmContract.address, parseTokenAmount("10000"));
         await token0.transfer(addr1.address, (await token0.balanceOf(owner.address)).div(BigNumber.from("2")));
 
-        await yieldFarmContract.addFarm(token0.address, parseTokenAmount("100"));
+        await yieldFarmContract.addFarm(token0.address, parseTokenAmount("100"), 0);
 
         const balanceBefore = await ifexTokenContract.balanceOf(yieldFarmContract.address);
         const beforeFarm = await yieldFarmContract.tokenToFarmInfo(token0.address);

@@ -78,6 +78,7 @@ interface SwapExchange:
     def liquidity_token() -> address: view
     def burn_liquidity(liquidity_token_amount: uint256, deadline: uint256): nonpayable
     def mint_liquidity(
+        input_token: address,
         base_token_amount: uint256, 
         min_asset_token_amount: uint256, 
         max_asset_token_amount: uint256, 
@@ -147,6 +148,17 @@ def create_exchange(
     mintedLiquidityTokens: uint256 = ERC20(exchangeLiquidityTokenContract).balanceOf(self)
     ERC20(exchangeLiquidityTokenContract).transfer(msg.sender, mintedLiquidityTokens)
 
+    if assetTokenContract != self.ifexTokenContract:
+        ifexAssetExchange: address = SwapFactory(self.swapFactoryContract).pair_to_exchange(assetTokenContract, self.ifexTokenContract)
+        ifexAssetLiquidityTokenContract: address = SwapExchange(ifexAssetExchange).liquidity_token()
+        ifexAssetMintedLiquidityTokens: uint256 = ERC20(ifexAssetLiquidityTokenContract).balanceOf(self)
+        ERC20(ifexAssetLiquidityTokenContract).transfer(msg.sender, ifexAssetMintedLiquidityTokens)
+
+        wethIfexExchange: address = SwapFactory(self.swapFactoryContract).pair_to_exchange(self.ifexTokenContract, self.wrappedEtherContract)
+        wethIfexLiquidityTokenContract: address = SwapExchange(wethIfexExchange).liquidity_token()
+        wethIfexMintedLiquidityTokens: uint256 = ERC20(wethIfexLiquidityTokenContract).balanceOf(self)
+        ERC20(wethIfexLiquidityTokenContract).transfer(msg.sender, wethIfexMintedLiquidityTokens)
+
 
 @external
 @payable
@@ -160,7 +172,6 @@ def mint_liquidity(
     WrappedEther(self.wrappedEtherContract).deposit(value=msg.value)
     self.safeTransferFrom(assetTokenContract, msg.sender, self, maxAssetTokenAmount)
 
-
     exchangeContract: address = SwapFactory(self.swapFactoryContract).pair_to_exchange(
         assetTokenContract, 
         self.wrappedEtherContract
@@ -170,16 +181,13 @@ def mint_liquidity(
     self.approveContract(self.wrappedEtherContract, exchangeContract)
 
     SwapExchange(exchangeContract).mint_liquidity(
+        self.wrappedEtherContract,
         msg.value, 
         minAssetTokenAmount, 
         maxAssetTokenAmount, 
         recipient, 
         deadline
     )
-
-    self.safeTransfer(assetTokenContract, msg.sender, ERC20(assetTokenContract).balanceOf(self))
-    liquidityToken: address = SwapExchange(exchangeContract).liquidity_token()
-    ERC20(liquidityToken).transfer(msg.sender, ERC20(liquidityToken).balanceOf(self))
 
 
 @external

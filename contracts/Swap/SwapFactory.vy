@@ -42,6 +42,7 @@ def safeApprove(_token: address, _spender: address, _value: uint256) -> bool:
     return True
 
 interface Exchange:
+    def liquidity_token() -> address: view
     def initialize_exchange(
         _base_token: address, 
         _asset_token: address, 
@@ -51,6 +52,7 @@ interface Exchange:
         _ifex_token_contract: address
     ): nonpayable
     def mint_liquidity(
+        input_token: address,
         base_token_amount: uint256, 
         min_asset_token_amount: uint256, 
         max_asset_token_amount: uint256, 
@@ -70,6 +72,7 @@ erc20_dividend_template: public(address)
 ifex_token_contract: public(address)
 
 pair_to_exchange: public(HashMap[address, HashMap[address, address]])
+liquidity_token_to_pair: public(HashMap[address, address[2]])
 exchange_to_pair: public(HashMap[address, address[2]])
 exchange_count: public(uint256)
 id_to_exchange: public(HashMap[uint256, address])
@@ -126,7 +129,11 @@ def _create_exchange(_token0: address, _token1: address, _token0_amount: uint256
         self.ifex_token_contract
     )
 
+    liquidity_token: address = Exchange(exchange).liquidity_token()
+    self.liquidity_token_to_pair[liquidity_token] = [token0, token1]
+
     Exchange(exchange).mint_liquidity(
+        token0,
         token0_amount, 
         token1_amount, 
         token1_amount, 

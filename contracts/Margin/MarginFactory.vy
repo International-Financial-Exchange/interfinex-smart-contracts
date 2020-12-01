@@ -9,6 +9,7 @@ interface MarginMarket:
         _ifex_token: address,
         _swap_factory: address
     ) -> bool: nonpayable
+    def liquidityToken() -> address: view
 
 event NewMarginMarket:
     creator: indexed(address)
@@ -20,6 +21,7 @@ id_count: public(uint256)
 id_to_margin_market: public(HashMap[uint256, address])
 pair_to_margin_market: public(HashMap[address, HashMap[address, address]])
 margin_market_to_pair: public(HashMap[address, address[2]])
+liquidity_token_to_pair: public(HashMap[address, address[2]])
 
 margin_market_template: public(address)
 dividend_erc20_template: public(address)
@@ -38,7 +40,6 @@ def initialize(_margin_market_template: address, _dividend_erc20_template: addre
     self.swap_factory = _swap_factory
     return
 
-# TODO: Mapping liquidity token to market - same with swap market
 @internal
 def createMarket(assetToken: address, collateralToken: address, creator: address):
     # Create and init the new margin market
@@ -52,6 +53,9 @@ def createMarket(assetToken: address, collateralToken: address, creator: address
     self.id_to_margin_market[new_id] = margin_market
     self.pair_to_margin_market[assetToken][collateralToken] = margin_market
     self.margin_market_to_pair[margin_market] = [assetToken, collateralToken]
+
+    liquidityToken: address = MarginMarket(margin_market).liquidityToken()
+    self.liquidity_token_to_pair[liquidityToken] = [assetToken, collateralToken]
     log NewMarginMarket(creator, margin_market, assetToken, collateralToken)
 
 @external

@@ -25,7 +25,7 @@ describe("Factory contract", function() {
         ifexTokenContract = await DividendERC20.deploy();
         await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, parseEther("2100000000"), ifexTokenContract.address, false);
 
-        SwapExchange = await ethers.getContractFactory("Exchange");
+        SwapExchange = await ethers.getContractFactory("SwapExchange");
         templateSwapExchangeContract = await SwapExchange.deploy();
 
         SwapFactory = await ethers.getContractFactory("SwapFactory");

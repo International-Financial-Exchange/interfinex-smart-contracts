@@ -1,10 +1,12 @@
-const { expect } = require("chai");
+const { expect } = require("chai"); 
+const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
 const { parseEther } = ethers.utils;
 
 const ONE = ethers.utils.parseEther("1");
+const BLOCKS_IN_A_YEAR = 2_336_000;
 
-const calculateInterestRate = (utilizationRate, multiplier) => Math.pow(utilizationRate * multiplier, 2);
+const calculateInterestRate = (utilizationRate, multiplier) => (Math.pow(utilizationRate * multiplier, 2) / BLOCKS_IN_A_YEAR).toFixed(18);
 const bigNumToDecimal = bigNum => parseFloat(ethers.utils.formatUnits(bigNum.toString(), 18));;
 const DAY = 60 * 60 * 24;
 
@@ -23,7 +25,7 @@ describe("MarginMarket contract", function() {
     let addr0, addr1, addr2, addr3, addrs;
   
     beforeEach(async function () {
-        [addr0, addr1, addr2, addr3, ...addrs] = await ethers.getSigners();
+        [addr0, addr1, addr2, addr3, addr4, ...addrs] = await ethers.getSigners();
 
         ERC20 = await ethers.getContractFactory("ERC20");
         [token0, token1, token3, token4] = await Promise.all(
@@ -77,9 +79,11 @@ describe("MarginMarket contract", function() {
         await ifexTokenContract.transfer(addr1.address, parseEther("100"));
         await ifexTokenContract.transfer(addr2.address, parseEther("100"));
         await ifexTokenContract.transfer(addr3.address, parseEther("100"));
+        await ifexTokenContract.transfer(addr4.address, parseEther("100"));
         await ifexTokenContract.connect(addr1).approve(marginMarketContract.address, ethers.constants.MaxUint256);
         await ifexTokenContract.connect(addr2).approve(marginMarketContract.address, ethers.constants.MaxUint256);
         await ifexTokenContract.connect(addr3).approve(marginMarketContract.address, ethers.constants.MaxUint256);
+        await ifexTokenContract.connect(addr4).approve(marginMarketContract.address, ethers.constants.MaxUint256);
         await token0.approve(marginMarketContract.address, ethers.constants.MaxUint256);
         await token1.approve(marginMarketContract.address, ethers.constants.MaxUint256);
 
@@ -144,7 +148,7 @@ describe("MarginMarket contract", function() {
             const depositAmount = parseEther("1"); // Asset token
             await marginMarketContract.deposit(depositAmount);
     
-            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false);
+            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false, addr0.address);
     
             const position = await marginMarketContract.account_to_position(addr0.address);
             expect(position.maintenanceMargin).to.equal(parseEther((0.5 * 0.15).toString()));
@@ -170,16 +174,18 @@ describe("MarginMarket contract", function() {
             await marginMarketContract.testAccrueInterest()
             expect(await marginMarketContract.totalBorrowed()).to.equal(
                 totalBorrowed
-                    .add(parseEther((bigNumToDecimal(totalBorrowed) * interestRate).toString()))
-                    .add(parseEther((bigNumToDecimal(totalBorrowed) * interestRate).toString()))
-                    .add(parseEther((bigNumToDecimal(totalBorrowed) * interestRate).toString()))
+                    .add(parseEther((bigNumToDecimal(totalBorrowed) * interestRate).toFixed(18)))
+                    .add(parseEther((bigNumToDecimal(totalBorrowed) * interestRate).toFixed(18)))
+                    .add(parseEther((bigNumToDecimal(totalBorrowed) * interestRate).toFixed(18)))
+                    .add(1)
             );
     
             expect(await marginMarketContract.interestIndex()).to.equal(
                 interestIndex
-                    .add(parseEther((bigNumToDecimal(interestIndex) * interestRate).toString()))
-                    .add(parseEther((bigNumToDecimal(interestIndex) * interestRate).toString()))
-                    .add(parseEther((bigNumToDecimal(interestIndex) * interestRate).toString()))
+                    .add(parseEther((bigNumToDecimal(interestIndex) * interestRate).toFixed(18)))
+                    .add(parseEther((bigNumToDecimal(interestIndex) * interestRate).toFixed(18)))
+                    .add(parseEther((bigNumToDecimal(interestIndex) * interestRate).toFixed(18)))
+                    .add(1)
             );
     
             expect(await marginMarketContract.totalReserved()).to.equal(totalReserved);
@@ -188,7 +194,7 @@ describe("MarginMarket contract", function() {
         it("Should decrease position", async function() {
             const depositAmount = parseEther("1"); // Asset token
             await marginMarketContract.deposit(depositAmount);
-            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false);
+            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false, addr0.address);
     
             const positionBefore = await marginMarketContract.account_to_position(addr0.address);
             
@@ -196,14 +202,14 @@ describe("MarginMarket contract", function() {
             await marginMarketContract.testAccrueInterest();
 
             expect((await marginMarketContract.getPosition(addr0.address)).borrowedAmount).to.equal(
-                parseEther(
-                    (bigNumToDecimal(positionBefore.borrowedAmount) * (
-                        bigNumToDecimal(await marginMarketContract.interestIndex()) / bigNumToDecimal(positionBefore.lastInterestIndex)
-                    )).toString()
-                )
+                positionBefore.borrowedAmount.mul(
+                    (await marginMarketContract.interestIndex())
+                        .mul(ONE)
+                        .div(positionBefore.lastInterestIndex)
+                ).div(ONE)
             );
     
-            await marginMarketContract.decreasePosition(parseEther("0.01"), 0, 0, 0, false);
+            await marginMarketContract.decreasePosition(parseEther("0.01"), 0, 0, 0, false, addr0.address);
             
             const positionAfter = await marginMarketContract.account_to_position(addr0.address);
             expect(positionAfter.maintenanceMargin).to.equal(positionBefore.maintenanceMargin);
@@ -218,7 +224,7 @@ describe("MarginMarket contract", function() {
         it("Should close position", async function() {
             const depositAmount = parseEther("1"); // Asset token
             await marginMarketContract.deposit(depositAmount);
-            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false);
+            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false, addr0.address);
     
             const accountBalanceBefore = await token0.balanceOf(addr0.address);
             const positionBefore = await marginMarketContract.account_to_position(addr0.address);
@@ -231,7 +237,7 @@ describe("MarginMarket contract", function() {
             );
     
             await ethers.provider.send('evm_mine');
-            await marginMarketContract.decreasePosition(positionBefore.collateralAmount, 0, 0, 0, false);
+            await marginMarketContract.decreasePosition(positionBefore.collateralAmount, 0, 0, 0, false, addr0.address);
     
             const positionAfter = await marginMarketContract.account_to_position(addr0.address);
             expect(positionAfter.maintenanceMargin).to.equal(0);
@@ -244,24 +250,25 @@ describe("MarginMarket contract", function() {
                 marginMarketBalanceBefore
                     .sub(positionBefore.maintenanceMargin)
                     .add(positionBefore.borrowedAmount)
-                    .add(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()))
-                    .add(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()))
-                    .add(1)
+                    .add(positionBefore.borrowedAmount.mul((interestRate * 10 ** 18).toString()).div(ONE))
+                    .add(positionBefore.borrowedAmount.mul((interestRate * 10 ** 18).toString()).div(ONE))
+                    .add(2)
             );
     
             expect(await token0.balanceOf(addr0.address)).to.equal(
                 accountBalanceBefore
                     .add(boughtAssetTokens.sub(positionBefore.borrowedAmount))
                     .add(positionBefore.maintenanceMargin)
-                    .sub(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()).add(1))
-                    .sub(parseEther((bigNumToDecimal(positionBefore.borrowedAmount) * interestRate).toString()))
+                    .sub(positionBefore.borrowedAmount.mul((interestRate * 10 ** 18).toString()).div(ONE))
+                    .sub(positionBefore.borrowedAmount.mul((interestRate * 10 ** 18).toString()).div(ONE))
+                    .sub(2)
             );
         });
     
         it("Should liquidate position with loss", async function() {
             const depositAmount = parseEther("1"); // Asset token
             await marginMarketContract.deposit(depositAmount);
-            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false);
+            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false, addr0.address);
 
             const position = await marginMarketContract.account_to_position(addr0.address);
 
@@ -284,12 +291,12 @@ describe("MarginMarket contract", function() {
         it("Should liquidate position without loss", async function() {
             const depositAmount = parseEther("1"); // Asset token
             await marginMarketContract.deposit(depositAmount);
-            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false);
+            await marginMarketContract.increasePosition(parseEther("1"), parseEther("0.5"), 0, 0, 0, false, addr0.address);
 
             const position = await marginMarketContract.account_to_position(addr0.address);
             
             await swapMarketContract.getInputToOutputAmount(token1.address, position.collateralAmount);
-            await swapMarketContract.swap(token1.address, parseEther("0.17"), addr0.address, 0, 0, 0, ethers.constants.AddressZero, false);
+            await swapMarketContract.swap(token1.address, parseEther("0.37"), addr0.address, 0, 0, 0, ethers.constants.AddressZero, false);
             const liquidationAmount = await swapMarketContract.getInputToOutputAmount(token1.address, position.collateralAmount);
 
             await ethers.provider.send("evm_mine");
@@ -303,6 +310,7 @@ describe("MarginMarket contract", function() {
                 position.borrowedAmount
                     .add(position.borrowedAmount.mul(interestRate).div(ONE))
                     .add(position.borrowedAmount.mul(interestRate).div(ONE))
+                    .add(1)
             );
 
             const newBorrowAmount = position.borrowedAmount
@@ -328,7 +336,7 @@ describe("MarginMarket contract", function() {
                                 ).mul("50").div("100")
                             )
                     )
-                    .add(1)
+                    .add(2)
             );
 
             expect(await marginMarketContract.totalBorrowed()).to.equal(0);
@@ -355,14 +363,14 @@ describe("MarginMarket contract", function() {
             expect(await ifexTokenContract.balanceOf(marginMarketContract.address)).to.equal(depositedVoteWeight);
             expect(await marginMarketContract.userDeposits(addr0.address)).to.equal(depositedVoteWeight);
             expect(await marginMarketContract.proposalVotes(1, 2)).to.equal(depositedVoteWeight.mul("150").div("100"));
-            expect(await marginMarketContract.userVotes(addr0.address, 1, 2)).to.equal(depositedVoteWeight);
+            expect(await marginMarketContract.userVotes(addr0.address, 1)).to.equal(depositedVoteWeight);
         });
 
         it("Should withdraw votes", async function() {
             const depositedVoteWeight = parseEther("1");
             
             await marginMarketContract.depositVote(1, 2, depositedVoteWeight);
-            await expect(marginMarketContract.withdrawVote(1, 2)).to.be.revertedWith("User is currently voting in an active proposal");
+            await expect(marginMarketContract.withdrawVote(1)).to.be.revertedWith("User is currently voting in an active proposal");
 
             await marginMarketContract.connect(addr1).depositVote(1, 2, depositedVoteWeight);
             await marginMarketContract.connect(addr2).depositVote(1, 3, depositedVoteWeight);
@@ -371,11 +379,11 @@ describe("MarginMarket contract", function() {
             await ethers.provider.send("evm_mine");
 
             await marginMarketContract.finalizeVote(1);
-            await marginMarketContract.withdrawVote(1, 2);
+            await marginMarketContract.withdrawVote(1);
 
             expect(await ifexTokenContract.balanceOf(marginMarketContract.address)).to.equal(depositedVoteWeight.mul("2"));
-            expect(await marginMarketContract.userVotes(addr0.address, 1, 2)).to.equal(0);
-            expect(await marginMarketContract.userVotes(addr0.address, 1, 3)).to.equal(0);
+            expect(await marginMarketContract.userVotes(addr0.address, 1)).to.equal(0);
+            expect(await marginMarketContract.userVotes(addr0.address, 1)).to.equal(0);
             expect(await marginMarketContract.userDeposits(addr0.address)).to.equal(0);
         });
 
@@ -407,7 +415,7 @@ describe("MarginMarket contract", function() {
 
             await expect(marginMarketContract.finalizeVote(1)).to.be.revertedWith("Proposal still has time left");
 
-            await ethers.provider.send("evm_increaseTime", [DAY * 0.95]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
             await ethers.provider.send("evm_mine");
 
             await marginMarketContract.finalizeVote(1);
@@ -416,7 +424,7 @@ describe("MarginMarket contract", function() {
 
             await marginMarketContract.depositVote(1, 1, depositedVoteWeight); 
 
-            await ethers.provider.send("evm_increaseTime", [DAY * 1]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
             await ethers.provider.send("evm_mine");
 
             const minInitialMarginBefore1 = await marginMarketContract.minInitialMarginRate();
@@ -425,20 +433,20 @@ describe("MarginMarket contract", function() {
             expect(await marginMarketContract.minInitialMarginRate()).to.be.equal(minInitialMarginBefore1.sub(minInitialMarginBefore1.mul("10").div("100")));
         });
         
-        it("Should finalize max borrow amount vote", async function() {
+        it("Should finalize max borrow amount rate vote", async function() {
             const depositedVoteWeight = parseEther("1");
             
-            const maxBorrowAmountBefore = await marginMarketContract.maxBorrowAmount();
+            const maxBorrowAmountRateBefore = await marginMarketContract.maxBorrowAmountRate();
 
             await marginMarketContract.depositVote(4, 3, depositedVoteWeight);
             await expect(marginMarketContract.finalizeVote(4)).to.be.revertedWith("Proposal still has time left");
 
-            await ethers.provider.send("evm_increaseTime", [DAY * 1]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
             await ethers.provider.send("evm_mine");
 
             await marginMarketContract.finalizeVote(4);
 
-            expect(await marginMarketContract.maxBorrowAmount()).to.equal(maxBorrowAmountBefore.add(maxBorrowAmountBefore.mul("20").div("100")));
+            expect(await marginMarketContract.maxBorrowAmountRate()).to.equal(maxBorrowAmountRateBefore.add(maxBorrowAmountRateBefore.mul("10").div("100")));
         });
 
         it("Should finalize interest multiplier vote", async function() {
@@ -452,12 +460,12 @@ describe("MarginMarket contract", function() {
 
             expect(winningOption).to.be.equal(3);
 
-            await ethers.provider.send("evm_increaseTime", [DAY * 0.9]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 2.9]);
             await ethers.provider.send("evm_mine");
 
             await expect(marginMarketContract.finalizeVote(3)).to.be.revertedWith("Proposal still has time left");
 
-            await ethers.provider.send("evm_increaseTime", [DAY * 0.15]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
             await ethers.provider.send("evm_mine");
 
             await marginMarketContract.finalizeVote(3);
@@ -466,7 +474,7 @@ describe("MarginMarket contract", function() {
 
             await marginMarketContract.depositVote(3, 1, depositedVoteWeight); 
 
-            await ethers.provider.send("evm_increaseTime", [DAY * 0.9]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 2.95]);
             await ethers.provider.send("evm_mine");
 
             await expect(marginMarketContract.finalizeVote(3)).to.be.revertedWith("Proposal still has time left");
@@ -480,7 +488,7 @@ describe("MarginMarket contract", function() {
             expect(await marginMarketContract.interestMultiplier()).to.be.equal(interestMultiplierBefore1.sub(interestMultiplierBefore1.mul("5").div("100")));
             expect(await marginMarketContract.proposalVotes(3, 1)).to.be.equal(0);
             expect(await marginMarketContract.proposalVotes(3, 3)).to.be.equal(0);
-            expect(await marginMarketContract.proposalVotes(3, 2)).to.be.equal(0);
+            expect(await marginMarketContract.proposalVotes(3, 2)).to.be.equal(depositedVoteWeight.mul("90").div("100"));
         });
     });
 
@@ -542,7 +550,7 @@ describe("MarginMarket contract", function() {
             
             // Enter position from 2 accounts
             let [initialAddr3Margin, initialAddr3BorrowAmount] = [parseEther("0.05"), parseEther("0.1")];
-            await expect(marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount, 0, 0, 0, false)).to.be.revertedWith("Insufficient initial margin");
+            await expect(marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount, 0, 0, 0, false, addr3.address)).to.be.revertedWith("Insufficient initial margin");
             
             initialAddr3Margin = initialAddr3BorrowAmount
                 .mul("50")
@@ -553,7 +561,7 @@ describe("MarginMarket contract", function() {
                         .div("100")    
                 );
 
-            await expect(marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount, 0, 0, 0, false)).to.be.revertedWith("Insufficient initial margin");
+            await expect(marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount, 0, 0, 0, false, addr3.address)).to.be.revertedWith("Insufficient initial margin");
             
             initialAddr3Margin = initialAddr3BorrowAmount
                 .mul("50")
@@ -569,7 +577,7 @@ describe("MarginMarket contract", function() {
                 token0.address, 
                 initialAddr3BorrowAmount.add(initialAddr3Margin.sub(initialAddr3BorrowAmount.mul("15").div("100"))),
             );
-            await marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount, 0, 0, 0, false);
+            await marginMarketContract.connect(addr3).increasePosition(initialAddr3Margin, initialAddr3BorrowAmount, 0, 0, 0, false, addr3.address);
 
             
             const addr3Position = await marginMarketContract.getPosition(addr3.address);
@@ -587,6 +595,7 @@ describe("MarginMarket contract", function() {
                     .div(ONE)
                     .pow("2")
                     .div(ONE)
+                    .div(BLOCKS_IN_A_YEAR)
             );
 
             expect(addr3Position.borrowedAmount).to.be.equal(initialAddr3BorrowAmount);
@@ -603,7 +612,7 @@ describe("MarginMarket contract", function() {
                 );
 
             let interestRate = await marginMarketContract.interestRate();
-            await marginMarketContract.connect(addr2).increasePosition(initialAddr2Margin, initialAddr2BorrowAmount, 0, 0, 0, false);
+            await marginMarketContract.connect(addr2).increasePosition(initialAddr2Margin, initialAddr2BorrowAmount, 0, 0, 0, false, addr2.address);
 
             expect(await marginMarketContract.totalReserved()).to.be.equal(
                 totalReservedBefore.sub(
@@ -630,6 +639,7 @@ describe("MarginMarket contract", function() {
                     .div(ONE)
                     .pow("2")
                     .div(ONE)
+                    .div(BLOCKS_IN_A_YEAR)
             );
 
             // Reduce position from 1 account without a complete exit
@@ -638,7 +648,7 @@ describe("MarginMarket contract", function() {
             let assetAmountBought = await swapMarketContract.getInputToOutputAmount(token1.address, collateralAmount);
             let interestRateBefore = await marginMarketContract.interestRate();
             totalReservedBefore = await marginMarketContract.totalReserved();
-            await marginMarketContract.connect(addr3).decreasePosition(collateralAmount, 0, 0, 0, false);
+            await marginMarketContract.connect(addr3).decreasePosition(collateralAmount, 0, 0, 0, false, addr3.address);
             
             let position3After = await marginMarketContract.getPosition(addr3.address);
             expect(position3After.collateralAmount).to.be.equal(position3Before.collateralAmount.sub(collateralAmount));
@@ -657,7 +667,7 @@ describe("MarginMarket contract", function() {
             totalReservedBefore = await marginMarketContract.totalReserved();
             interestRateBefore = await marginMarketContract.interestRate();
 
-            await marginMarketContract.connect(addr3).closePosition(0, 0, 0, false); 
+            await marginMarketContract.connect(addr3).closePosition(0, 0, 0, false, addr3.address); 
 
             position3After = await marginMarketContract.getPosition(addr3.address);
 
@@ -720,7 +730,7 @@ describe("MarginMarket contract", function() {
                 )
             );
 
-            await marginMarketContract.connect(addr2).closePosition(0, 0, 0, false);
+            await marginMarketContract.connect(addr2).closePosition(0, 0, 0, false, addr2.address);
 
             await marginMarketContract.connect(addr0).withdraw(liquidityWithdrawAmount);
             await marginMarketContract.connect(addr1).withdraw(await liquidityTokenContract.balanceOf(addr1.address));
@@ -751,7 +761,7 @@ describe("MarginMarket contract", function() {
             expect((await marginMarketContract.getWinningOption(INITIAL_MARGIN_PROPOSAL))[0]).to.be.equal(PRESERVE_OPTION);
 
             // Fail withdraw vote from 1 account
-            await expect(marginMarketContract.connect(addr1).withdrawVote(INITIAL_MARGIN_PROPOSAL, DOWN_OPTION)).to.be.revertedWith("User is currently voting in an active proposal");
+            await expect(marginMarketContract.connect(addr1).withdrawVote(INITIAL_MARGIN_PROPOSAL)).to.be.revertedWith("User is currently voting in an active proposal");
 
             // Fail deposit vote
             await expect(marginMarketContract.connect(addr2).depositVote(INITIAL_MARGIN_PROPOSAL, DOWN_OPTION, parseEther("1"))).to.be.revertedWith("User has already voted on this proposal");
@@ -765,7 +775,7 @@ describe("MarginMarket contract", function() {
             await expect(marginMarketContract.finalizeVote(INITIAL_MARGIN_PROPOSAL)).to.be.revertedWith("Proposal still has time left");
             
             // Finalize vote
-            await ethers.provider.send("evm_increaseTime", [DAY]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
             await ethers.provider.send("evm_mine");
 
             let initialMarginBefore = await marginMarketContract.minInitialMarginRate();
@@ -779,36 +789,64 @@ describe("MarginMarket contract", function() {
 
             // Deposit vote
             await marginMarketContract.connect(addr1).depositVote(INITIAL_MARGIN_PROPOSAL, DOWN_OPTION, addr1Vote);
-            expect(await marginMarketContract.userDeposits(addr1.address)).to.be.equal(addr1Vote.add(addr1Vote).add(addr1MaintenanceVote));
-            expect(await marginMarketContract.userVotes(addr1.address, INITIAL_MARGIN_PROPOSAL, UP_OPTION)).to.be.equal(addr1Vote);
+            expect(await marginMarketContract.userDeposits(addr1.address)).to.be.equal(addr1Vote.add(addr1MaintenanceVote));
+            expect(await marginMarketContract.userVotes(addr1.address, INITIAL_MARGIN_PROPOSAL)).to.be.equal(addr1Vote);
             
             // Withdraw vote
-            await ethers.provider.send("evm_increaseTime", [DAY]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
             await ethers.provider.send("evm_mine");
             await marginMarketContract.finalizeVote(INITIAL_MARGIN_PROPOSAL);
 
             let addr1BalanceBefore = await ifexTokenContract.balanceOf(addr1.address);
-            await marginMarketContract.connect(addr1).withdrawVote(INITIAL_MARGIN_PROPOSAL, UP_OPTION);
+            await marginMarketContract.connect(addr1).withdrawVote(INITIAL_MARGIN_PROPOSAL);
             expect(await ifexTokenContract.balanceOf(addr1.address)).to.be.equal(addr1BalanceBefore.add(addr1Vote));
-            await marginMarketContract.connect(addr1).withdrawVote(INITIAL_MARGIN_PROPOSAL, DOWN_OPTION);
-            expect(await ifexTokenContract.balanceOf(addr1.address)).to.be.equal(addr1BalanceBefore.add(addr1Vote).add(addr1Vote));
+            await marginMarketContract.connect(addr1).withdrawVote(INITIAL_MARGIN_PROPOSAL);
+            expect(await ifexTokenContract.balanceOf(addr1.address)).to.be.equal(addr1BalanceBefore.add(addr1Vote));
 
             // Withdraw and finalize all votes
-            await marginMarketContract.connect(addr2).withdrawVote(INITIAL_MARGIN_PROPOSAL, PRESERVE_OPTION);
-            await marginMarketContract.connect(addr3).withdrawVote(INITIAL_MARGIN_PROPOSAL, PRESERVE_OPTION);
+            await marginMarketContract.connect(addr2).withdrawVote(INITIAL_MARGIN_PROPOSAL);
+            await marginMarketContract.connect(addr3).withdrawVote(INITIAL_MARGIN_PROPOSAL);
 
-            await expect(marginMarketContract.connect(addr1).withdrawVote(MAINTENANCE_MARGIN_PROPOSAL, UP_OPTION)).to.be.revertedWith("User is currently voting in an active proposal");
+            await expect(marginMarketContract.connect(addr1).withdrawVote(MAINTENANCE_MARGIN_PROPOSAL)).to.be.revertedWith("User is currently voting in an active proposal");
             
-            await ethers.provider.send("evm_increaseTime", [DAY]);
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
             await ethers.provider.send("evm_mine");
             let maintenanceMarginBefore = await marginMarketContract.maintenanceMarginRate();
             await marginMarketContract.finalizeVote(MAINTENANCE_MARGIN_PROPOSAL);
 
             expect(await marginMarketContract.maintenanceMarginRate()).to.be.equal(maintenanceMarginBefore.add(maintenanceMarginBefore.mul("5").div("100")))
 
-            await marginMarketContract.connect(addr1).withdrawVote(MAINTENANCE_MARGIN_PROPOSAL, UP_OPTION);
+            await marginMarketContract.connect(addr1).withdrawVote(MAINTENANCE_MARGIN_PROPOSAL);
 
             expect(await ifexTokenContract.balanceOf(marginMarketContract.address)).to.be.equal(0);
+
+            // Check the baseline vote persiting
+            const deposit4Amount = parseEther("10");
+            const addr4BalanceBefore = await ifexTokenContract.balanceOf(addr4.address);
+            await marginMarketContract.connect(addr4).depositVote(MAINTENANCE_MARGIN_PROPOSAL, UP_OPTION, deposit4Amount);
+            
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
+            await ethers.provider.send("evm_mine");
+
+            await marginMarketContract.finalizeVote(MAINTENANCE_MARGIN_PROPOSAL);
+
+            expect(await marginMarketContract.proposalVotes(MAINTENANCE_MARGIN_PROPOSAL, PRESERVE_OPTION)).to.be.equal(
+                deposit4Amount.mul("90").div("100")
+            );
+
+            await marginMarketContract.connect(addr4).depositVote(MAINTENANCE_MARGIN_PROPOSAL, PRESERVE_OPTION, deposit4Amount.mul("5"));
+
+            await ethers.provider.send("evm_increaseTime", [DAY * 3]);
+            await ethers.provider.send("evm_mine");
+
+            await marginMarketContract.finalizeVote(MAINTENANCE_MARGIN_PROPOSAL);
+
+            expect(await marginMarketContract.proposalVotes(MAINTENANCE_MARGIN_PROPOSAL, PRESERVE_OPTION)).to.be.equal(
+                deposit4Amount.mul("90").div("100")
+            );
+            
+            await marginMarketContract.connect(addr4).withdrawVote(MAINTENANCE_MARGIN_PROPOSAL);
+            expect(await ifexTokenContract.balanceOf(addr4.address)).to.be.equal(addr4BalanceBefore);
         });
     });
 
