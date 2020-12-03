@@ -216,6 +216,16 @@ def initialize(_assetToken: address, _collateralToken: address, _dividendERC20Te
 @internal
 @view
 def _pureAccrueInterest() -> (uint256, uint256):
+    """
+    @dev    Calculate the accrued interest of the total borrows.
+
+            totalBorrowed = (blockDelta * interestRate * totalBorrowed) + totalBorrowed
+            interestIndex = (blockDelta * interestRate * interestIndex) + interestIndex
+                where:
+            blockDelta = amount of blocks since last interest accrue update
+
+    @return (newTotalBorrowed, newInterestIndex)
+    """
     blockDelta: uint256 = block.number - self.lastUpdate
     if blockDelta == 0:
         return (self.totalBorrowed, self.interestIndex)
@@ -233,6 +243,9 @@ def pureAccrueInterest() -> (uint256, uint256):
 
 @internal
 def accrueInterest():
+    """
+    @dev    Updates the totalBorrowed and interestIndex via accruing the interest.
+    """
     self.totalBorrowed, self.interestIndex = self._pureAccrueInterest()
     self.lastUpdate = block.number
 
@@ -241,7 +254,16 @@ def testAccrueInterest():
     self.accrueInterest()
 
 @internal
-def updateInterestRate():    
+def updateInterestRate(): 
+    """
+    @dev    Updates the interest rate of the contract.
+
+            interestRate = (utilizationRate * interestMultiplier) ^ 2 / BLOCKS_IN_A_YEAR
+                where:
+            utilizationRate = totalBorrowed / (totalReserved + totalBorrowed)
+            interestMultiplier = parameter which is voted on every ~3 days
+            BLOCKS_IN_A_YEAR = 2336000
+    """   
     utilizationRate: uint256 = 0 # If totalBorrowed == 0 then utilizationRate will always be 0
     if self.totalBorrowed > 0 and self.totalReserved > 0:
         totalBalance: uint256 = self.totalBorrowed + self.totalReserved
@@ -257,6 +279,14 @@ def updateInterestRate():
 
 @external
 def deposit(_amount: uint256) -> uint256:
+    """
+    @dev    Deposits funding into the contract which can be borrowed by traders and
+            sends liquidity tokens to the depositer that can be claimed at a later date.
+
+            mintedLiquidityAmount = totalLiquidityAmount * _amount / (totalBorrowed + totalReserved)
+
+    @param _amount the amount of assetTokens deposited 
+    """  
     self.protect()
     self.accrueInterest()
 
@@ -275,6 +305,17 @@ def deposit(_amount: uint256) -> uint256:
 
 @external
 def withdraw(_liquidityTokenAmount: uint256) -> uint256:
+    """
+    @dev    Withdraws funding from the contract totalReserved amount.
+            Amount to be withdrawn can never be more than the totalReserved though a user may have claim
+            to more funds than is in the totalReserved; They will have to wait until totalReserved increases.
+
+            totalContractBalance = totalBorrowed + totalReserved
+            fractionOfLiquidityOwned = _liquidityTokenAmount / totalLiquidityAmount
+            withdrawAmount = fractionOfLiquidityOwned * totalContractBalance
+
+    @param _liquidityTokenAmount the amount of liquidity tokens to burn 
+    """  
     self.protect()
     assert _liquidityTokenAmount > 0, "Withdraw amount must be greater than 0"
     self.accrueInterest()
@@ -295,6 +336,12 @@ def withdraw(_liquidityTokenAmount: uint256) -> uint256:
 @view
 @internal
 def getOutputToInput(assetTokenAmount: uint256) -> uint256:
+    """
+    @dev    Util function for calculating the swap exchange rate.
+            Answers: "How much `collateralTokenAmount` do I need to pay to receive `assetTokenAmount` asset tokens?"
+
+    @param assetTokenAmount the amount of assetTokens to buy 
+    """ 
     assetTokenTotal: uint256 = ERC20(self.assetToken).balanceOf(self.swapExchange)
     collateralTokenTotal: uint256 = ERC20(self.collateralToken).balanceOf(self.swapExchange)
     return assetTokenAmount * collateralTokenTotal / (assetTokenTotal - assetTokenAmount)
@@ -302,6 +349,15 @@ def getOutputToInput(assetTokenAmount: uint256) -> uint256:
 @internal
 @view
 def accruePositionInterest(borrowedAmount: uint256, lastInterestIndex: uint256) -> uint256:
+    """
+    @dev    Calculates the amount that a position has borrowed by accumulating
+            the interest on his borrowed amount.
+
+            newBorrowedAmount = borrowedAmount * interestIndex / lastInterestIndex 
+
+    @param borrowedAmount the amount the user has borrowed so far 
+    @param lastInterestIndex most recent interestIndex at which his borrowed amount was updated
+    """ 
     if borrowedAmount == 0 or lastInterestIndex == 0:
         return 0
 
@@ -311,6 +367,12 @@ def accruePositionInterest(borrowedAmount: uint256, lastInterestIndex: uint256) 
 @external
 @view
 def getPosition(account: address) -> Position: 
+    """
+    @dev    Util function for use by dapps to easily fetch the current position of an account.
+            This function is not used by this smart contract; It's only intended for external use.
+
+    @param account the intended position to fetch 
+    """ 
     position: Position = self.account_to_position[account]
 
     tmpInterestIndex: uint256 = 0
@@ -326,10 +388,16 @@ def getPosition(account: address) -> Position:
 
 @external
 def authorize(spender: address):
+    """
+    @dev Authorizes an account to open positions on the msg.sender's behalf
+    """ 
     self.isAuthorized[msg.sender][spender] = True
 
 @external
 def deauthorize(spender: address):
+    """
+    @dev Deauthorizes an account from opening positions on the msg.sender's behalf
+    """ 
     self.isAuthorized[msg.sender][spender] = False
 
 # borrow and margin inputs are both the assetToken type
@@ -342,7 +410,31 @@ def increasePosition(
     deadline: uint256, 
     useIfex: bool,
     account: address
-) -> uint256:
+) -> uint256:    
+    """
+    @dev    Increases the position of an account.
+            The account's position is then updated using the following calculations:
+            
+            maintenanceMargin = _borrowAmount * maintenanceMarginRate -- Asset Token
+            initialMargin = _totalMarginAmount - maintenanceMargin -- Asset Token
+            collateralAmount += swap(_borrowAmount + initialMargin) -- Collateral Token
+            borrowedAmount += _borrowAmount + accrueInterest(borrowedAmount)
+            lastInterestIndex = interestIndex
+                where:
+            swap() = a function that swaps asset token to collateral tokens using an external swap contract
+            accrueInterest() = self.accruePositionInterest
+
+            totalReserved, totalBorrowed and interestRate are then all updated too.
+
+    @param _totalMarginAmount Amount of margin to post which determines the leverage of the position 
+    @param _borrowAmount Amount to borrow
+        @param minCollateralAmount
+        @param maxCollateralAmount
+        @param deadline
+        @param useIfex
+            ^ All used For the swap() function when converting the _borrowAmount + initialMargin to collateralTokens
+    @param account The account which is opening/increasing the position
+    """ 
     self.protect()
 
     assert msg.sender == account or self.isAuthorized[account][msg.sender] == True, "Account not authorized"
@@ -385,12 +477,47 @@ def increasePosition(
     return new_position.collateralAmount
 
 @internal
-def _decreasePosition(_collateralTokenAmount: uint256, account: address, minAssetAmount: uint256, maxAssetAmount: uint256, deadline: uint256, useIfex: bool, recipient: address):
+def _decreasePosition(
+    _collateralTokenAmount: uint256, 
+    account: address, 
+    minAssetAmount: uint256, 
+    maxAssetAmount: uint256, 
+    deadline: uint256, 
+    useIfex: bool, 
+    recipient: address
+):
+    """
+    @dev    Decreases the position of an account.
+            First we convert the _collateralTokenAmount into assetTokens
+
+            assetTokensBought = swap(_collateralTokenAmount)
+
+            if the assetTokensBought is greater than the borrowedAmount then the position is closed,
+            and the maintenance margin is refunded plus assetTokensBought - position.borrowedAmount
+        
+            if the assetTokensBought is less than the borrowed amount then the position is updated like so:
+
+            collateralAmount -= _collateralTokenAmount
+            borrowedAmount -= assetTokensBought
+
+            totalReserved, totalBorrowed and interestRate are then all updated too.
+            
+    @param _collateralTokenAmount Amount of collateral to sell 
+    @param _account Account whose position to update
+        @param minAssetAmount
+        @param maxAssetAmount
+        @param deadline
+        @param useIfex
+            ^ All used For the swap() function when converting the _collateralTokenAmount to assetTokens
+    @param recipient The account to receive any potential profit
+    """ 
     assert _collateralTokenAmount > 0, "_collateralTokenAmount must be greater than 0"
 
     self.accrueInterest()
 
     new_position: Position = self.account_to_position[account]
+    assert new_position.collateralAmount >= _collateralTokenAmount, "Insufficient collateral"
+
     new_position.borrowedAmount += self.accruePositionInterest(new_position.borrowedAmount, new_position.lastInterestIndex) # Asset token
     new_position.lastInterestIndex = self.interestIndex
 
@@ -400,6 +527,8 @@ def _decreasePosition(_collateralTokenAmount: uint256, account: address, minAsse
         self.safeTransfer(self.assetToken, recipient, assetTokenProfit)
         self.safeTransfer(self.collateralToken, recipient, new_position.collateralAmount - _collateralTokenAmount)
         self.totalReserved += new_position.borrowedAmount
+        # Sum of all position borrows should always be greater than totalBorrowed because we round the position accrue interest 
+        # calculation up by 1 whenver there is integer division; So subOrDefault here prevents an underflow error.
         self.totalBorrowed = self.subOrDefault(self.totalBorrowed, new_position.borrowedAmount, 0)
         self.account_to_position[account] = empty(Position)
     else:
@@ -428,19 +557,41 @@ def closePosition(minAssetAmount: uint256, maxAssetAmount: uint256, deadline: ui
 
 @external
 def liquidatePosition(account: address):
+    """
+    @dev    Attempts to liquidate the position of an account
+            
+            Attempt to sell 100% of the position.collateralAmount of the account and get assetTokens:
+                liquidationAmount = swap(position.collateralAmount)
+            
+            If (liquidationAmount < position.borrowedAmount) then the account can be liquidated.
+            
+            remainingDebt = max(borrowedAmount - liquidationAmount, position.maintenanceMargin)
+            surplusAmount = position.maintenanceMargin - remainingDebt
+
+            if (surplusAmount > 0) then it is distributed accordingly:
+                surplusAmount * 3% goes to liquidator
+                surplusAmount * 47% is converted to ifex and distributed as dividends
+                surplusAmount * 50% is added to the totalReserved
+
+            The account's position is then emptied and reset.
+    @param account Position to be liquidated
+    """ 
     self.protect()
     self.accrueInterest()
-    assert msg.sender == tx.origin
+    assert msg.sender == tx.origin # Prevent flash swap attacks
     
+    # Update the accouns borrowedAmount
     position: Position = self.account_to_position[account]
     position.borrowedAmount += self.accruePositionInterest(position.borrowedAmount, position.lastInterestIndex)
     assert position.borrowedAmount > 0, "Cannot liquidate as position is not active"
     
+    # Attempt to liquidate
     liquidationAmount: uint256 = 0
     if position.collateralAmount > 0:
         liquidationAmount = SwapExchange(self.swapExchange).swap(self.collateralToken, position.collateralAmount, self, 0, 0, 0, ZERO_ADDRESS, False)
         assert liquidationAmount <= position.borrowedAmount, "Position has sufficient collateral"
 
+    # Prevent too many liquidations from happening in a single block
     assert self.currentBlockLiquidations <= self.mulTruncate(self.totalReserved + self.totalBorrowed, self.maxLiquidateVolumeRate) or block.number != self.lastLiquidateBlock, "Too many liquidations in this block"
     if block.number != self.lastLiquidateBlock:
         self.lastLiquidateBlock = block.number
@@ -450,7 +601,8 @@ def liquidatePosition(account: address):
     remainingDebt: uint256 = position.borrowedAmount - liquidationAmount
     if remainingDebt > position.maintenanceMargin:
         remainingDebt = position.maintenanceMargin
-    
+
+    # Rewards    
     surplusAmount: uint256 = position.maintenanceMargin - remainingDebt
     liquidatorReward: uint256 = surplusAmount * 3 / 100
     ifexReward: uint256 = surplusAmount * 47 / 100
@@ -459,6 +611,7 @@ def liquidatePosition(account: address):
     self.totalReserved += liquidationAmount + remainingDebt + fundingReward
     self.totalBorrowed = self.subOrDefault(self.totalBorrowed, position.borrowedAmount, 0)
 
+    # Reset the position
     self.account_to_position[account] = empty(Position)
 
     if liquidatorReward > 0:
