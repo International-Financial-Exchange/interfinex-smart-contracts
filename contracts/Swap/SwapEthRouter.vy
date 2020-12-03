@@ -100,6 +100,8 @@ wrappedEtherContract: public(address)
 swapFactoryContract: public(address)
 ifexTokenContract: public(address)
 
+isInitialised: public(bool)
+
 @external
 @payable
 def __default__():
@@ -107,6 +109,8 @@ def __default__():
 
 @external
 def initialize(_wrappedEtherContract: address, _swapFactoryContract: address, _ifexTokenContract: address):
+    assert self.isInitialised == False, "Already initialised"
+    self.isInitialised = True
     self.wrappedEtherContract = _wrappedEtherContract
     self.swapFactoryContract = _swapFactoryContract
     self.ifexTokenContract = _ifexTokenContract

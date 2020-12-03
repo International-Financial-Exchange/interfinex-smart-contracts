@@ -92,6 +92,8 @@ interface WrappedEther:
 wrappedEtherContract: public(address)
 marginFactoryContract: public(address)
 
+isInitialised: public(bool)
+
 @internal
 def approveContract(tokenContract: address, exchangeContract: address):
     assetAllowance: uint256 = ERC20(tokenContract).allowance(self, exchangeContract)
@@ -105,6 +107,8 @@ def __default__():
 
 @external
 def initialize(_wrappedEtherContract: address, _marginFactoryContract: address, ):
+    assert self.isInitialised == False, "Already initialised"
+    self.isInitialised = True
     self.wrappedEtherContract = _wrappedEtherContract
     self.marginFactoryContract = _marginFactoryContract
 
