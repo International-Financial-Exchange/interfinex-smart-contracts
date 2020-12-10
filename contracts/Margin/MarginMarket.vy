@@ -100,8 +100,8 @@ def subOrDefault(a: uint256, b: uint256, defaultValue: uint256) -> uint256:
     return a - b    
 
 # Each user should only be able to call each external function once per block
-lastUser: address
-lastBlock: uint256
+lastUser: public(address)
+lastBlock: public(uint256)
 
 @internal
 def protect():
@@ -249,9 +249,9 @@ def accrueInterest():
     self.totalBorrowed, self.interestIndex = self._pureAccrueInterest()
     self.lastUpdate = block.number
 
-@external
-def testAccrueInterest():
-    self.accrueInterest()
+# @external
+# def testAccrueInterest():
+#     self.accrueInterest()
 
 @internal
 def updateInterestRate(): 
@@ -428,11 +428,6 @@ def increasePosition(
 
     @param _totalMarginAmount Amount of margin to post which determines the leverage of the position 
     @param _borrowAmount Amount to borrow
-        @param minCollateralAmount
-        @param maxCollateralAmount
-        @param deadline
-        @param useIfex
-            ^ All used For the swap() function when converting the _borrowAmount + initialMargin to collateralTokens
     @param account The account which is opening/increasing the position
     """ 
     self.protect()
@@ -504,11 +499,6 @@ def _decreasePosition(
             
     @param _collateralTokenAmount Amount of collateral to sell 
     @param _account Account whose position to update
-        @param minAssetAmount
-        @param maxAssetAmount
-        @param deadline
-        @param useIfex
-            ^ All used For the swap() function when converting the _collateralTokenAmount to assetTokens
     @param recipient The account to receive any potential profit
     """ 
     assert _collateralTokenAmount > 0, "_collateralTokenAmount must be greater than 0"
@@ -680,6 +670,7 @@ def depositVote(proposalId: uint256, voteOption: uint256, amount: uint256):
     ERC20(self.ifexToken).transferFrom(msg.sender, self, amount)
     self.userDeposits[msg.sender] += amount
     
+    # Preserve votes hold 1.5x the weight of increase/decrease votes
     if voteOption == PRESERVE_OPTION:
         self.proposalVotes[proposalId][voteOption] += amount * 150 / 100
     else:
@@ -698,6 +689,10 @@ def withdrawVote(proposalId: uint256,):
 @internal
 @view
 def _getWinningOption(proposalId: uint256) -> (uint256, uint256): # returns (option, count)
+    """
+    @dev Get the option with the highest amount of votes
+    @param proposalId proposal to get the winning option from
+    """ 
     upVotes: uint256 = self.proposalVotes[proposalId][UP_OPTION]
     downVotes: uint256 = self.proposalVotes[proposalId][DOWN_OPTION]
     preserveVotes: uint256 = self.proposalVotes[proposalId][PRESERVE_OPTION]
@@ -713,7 +708,7 @@ def _getWinningOption(proposalId: uint256) -> (uint256, uint256): # returns (opt
 def getWinningOption(proposalId: uint256) -> (uint256, uint256):
     return self._getWinningOption(proposalId)
 
-# Gotta set those boundries or traders will get crazy... seriously.
+# Gotta set those boundries or traders will get crazy...
 MAX_INITIAL_MARGIN_RATE: constant(uint256) = ONE * 10
 MIN_INITIAL_MARGIN_RATE: constant(uint256) = ONE * 1 / 1000 # 0.1%
 MAX_MAINTENANCE_MARGIN_RATE: constant(uint256) = ONE * 10
@@ -729,6 +724,18 @@ MIN_VOTING_DURATION: constant(uint256) = DAY / 2 # 12 hours - just in case of so
 
 @external
 def finalizeVote(proposalId: uint256):
+    """
+    @dev    Finalize the vote for a given proposal then update the respective parameter by either
+            increasing, decreasing or preserving it's value depending on the vote outcome.
+            
+            If the winning vote was to decrease or increase then update the baseline vote count to be
+            90% of the winning vote. If the winning vote was to preserve then keep the baseline vote
+            count as it is and don't change it. 
+            
+            Reset the increase and decrease vote counts to 0 and then set the preserve vote count to be the baseline vote count.
+
+    @param proposalId proposal to finalize
+    """ 
     self.protect()
     assert block.timestamp >= self.proposalFinalisationDate[proposalId], "Proposal still has time left"
     assert proposalId != 0 and proposalId <= 4, "Proposal does not exist"

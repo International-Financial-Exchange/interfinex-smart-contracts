@@ -206,27 +206,45 @@
         },
         "templateMarginMarket": {
             "name": "templateMarginMarket",
-            "address": "0xBD68292f6283cb4Ae7ABB5a802d85aBCA9687644",
+            "address": "0x46B343154aF9D1dCDf8Ef77Cd439482E41c14289",
             "artifactName": "MarginMarket",
-            "deploymentTransactionHash": "0x6cb824f9b4644d847bcc7da870aa5dffda6b052dd1d307f88300248f62455ddb"
+            "deploymentTransactionHash": "0xba4b1e04975f082ec24fc9865d09e76f3ef4f82662a49f9cc2d85836b8a6ee21"
         },
         "MarginFactory": {
             "name": "MarginFactory",
-            "address": "0x6ad549B9dD7895f49BA5c1c1f2977EB3dCA315Ef",
+            "address": "0xD9a89d230081e8F767c6F1CF90a24dC7Ea2F18e7",
             "artifactName": "MarginFactory",
-            "deploymentTransactionHash": "0xf3894999e4c2f0c5dd0a434b83b613c1f1bbd4312e8345f67f0ea252272fafbe"
+            "deploymentTransactionHash": "0x343dd115253cda0f31527f6c61af91e8174f4eaa14647a12fd0825e473fdc119"
         },
         "MarginEthRouter": {
             "name": "MarginEthRouter",
-            "address": "0x922d3a454e6c09876D8c222D6b22d734f8F778b4",
+            "address": "0x729B17bbbC77aF2d2DdCb675E1f1426d5AdEe85C",
             "artifactName": "MarginEthRouter",
-            "deploymentTransactionHash": "0x63a7d0064f8c01e190710537a8a965a05c23a1ff26d8b15e6513e51f3e090a8e"
+            "deploymentTransactionHash": "0x4c66d0dc95743f0e5dd102514d33722a9663fc8d602ed87bfb182e523f687c7e"
         },
         "YieldFarm": {
             "name": "YieldFarm",
             "address": "0x7cc1F66c313E61D44BFc1D5fec3C89C26770E827",
             "artifactName": "YieldFarm",
             "deploymentTransactionHash": "0x31acd5f459d3c6bf3f9a0f9747f346c775fb17bc35c7aacc5d9dcc4be9e0991d"
+        },
+        "TeamReservedVault": {
+            "name": "TeamReservedVault",
+            "address": "0x2ac2AeF78f52FFCB08181008F1169C045ABdf2F8",
+            "artifactName": "Vault",
+            "deploymentTransactionHash": "0xcd0dcf73814cf06eb16f34a0848ae5b70223b6b77bebfda2965356ee910a9aac"
+        },
+        "MarketingVaultContract": {
+            "name": "MarketingVaultContract",
+            "address": "0x84790B24750aF49Ab10317Fe88F84b001738D5FB",
+            "artifactName": "Vault",
+            "deploymentTransactionHash": "0x761119aabffa13fbb651f638a3693286f44ebeb66feaa36a240864a2d942b733"
+        },
+        "CommunityVault": {
+            "name": "CommunityVault",
+            "address": "0x4cFfb1e77c2EAc1E6F4697bB433cCA9Edac7Eed7",
+            "artifactName": "Vault",
+            "deploymentTransactionHash": "0x4cd5737287d15e5854cfea7b3e9c38ecd5af2ff6fddac786414f00f9cb9a74e5"
         }
     },
     "localhost": {

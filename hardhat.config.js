@@ -1,6 +1,6 @@
 const { ethers } = require("ethers");
 const { task } = require("hardhat/config");
-const { privateKeys } = require("./.env.json");
+const { privateKeys, projectDirs = [] } = require("./.env.json");
 
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-vyper");
@@ -12,10 +12,8 @@ module.exports = {
     solidity: "0.7.3",
     vyper: {},
     abiExporter: {
-        path: [
-            "/home/personal/Desktop/Projects/interfinex-frontend/public/contracts/abi",
-            "/home/personal/Desktop/Projects/interfinex-backend/contracts/abi"
-        ],
+        // Can be commented out if not needed
+        path: projectDirs,
         clear: true,
         flat: true,
         allowExternalDir: true,
@@ -39,9 +37,6 @@ module.exports = {
         }
     },
     trackedDeploy: {
-        path: [
-            "/home/personal/Desktop/Projects/interfinex-frontend/public/contracts/",
-            "/home/personal/Desktop/Projects/interfinex-backend/contracts/",
-        ]
+        path: projectDirs
     },
 };

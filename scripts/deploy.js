@@ -1,3 +1,4 @@
+const { BigNumber } = require("ethers");
 const { ethers, hardhatArguments } = require("hardhat");
 
 const { parseEther } = ethers.utils;
@@ -87,11 +88,11 @@ const swapContracts = async () => {
 };
 
 const marginContracts = async () => {
-    // console.log("");
-    // const templateMarginMarketContract = await tracked.deploy("MarginMarket", "templateMarginMarket", RESET);
-    // console.log(`🚜 Deployed template MarginMarket contract: ${templateMarginMarketContract.address}`);
+    console.log("");
+    const templateMarginMarketContract = await tracked.deploy("MarginMarket", "templateMarginMarket", RESET);
+    console.log(`🚜 Deployed template MarginMarket contract: ${templateMarginMarketContract.address}`);
     
-    // const marginFactoryContract = await tracked.deploy("MarginFactory", "MarginFactory", RESET);
+    const marginFactoryContract = await tracked.deploy("MarginFactory", "MarginFactory", RESET);
 
     const {
         TemplateDividendERC20,
@@ -100,13 +101,13 @@ const marginContracts = async () => {
         WrappedEther,
     } = tracked.contracts[hre.network.name];
 
-    // await marginFactoryContract.initialize(
-    //     templateMarginMarketContract.address, 
-    //     TemplateDividendERC20.address, 
-    //     IfexToken.address,
-    //     SwapFactory.address
-    // );
-    // console.log(`🚜 Deployed and Initialized MarginFactory contract: ${marginFactoryContract.address}`);
+    await marginFactoryContract.initialize(
+        templateMarginMarketContract.address, 
+        TemplateDividendERC20.address, 
+        IfexToken.address,
+        SwapFactory.address
+    );
+    console.log(`🚜 Deployed and Initialized MarginFactory contract: ${marginFactoryContract.address}`);
 
     const {
         MarginFactory
@@ -134,12 +135,32 @@ const yieldFarmContract = async () => {
     return { yieldFarmContract };
 };
 
+const DAY = 60 * 60 * 24;
+
+const vaultContracts = async () => {
+    console.log("")
+
+    const { IfexToken } = tracked.contracts[hre.network.name];
+    const teamReservedVaultContract = await tracked.deploy("Vault", "TeamReservedVault", RESET);
+    await teamReservedVaultContract.initialize(Math.floor(Date.now() / 1000) + DAY * 180,  IfexToken.address);
+    console.log(`🚜 Deployed and Initialized Team Reserved Vault contract: ${teamReservedVaultContract.address}`);
+
+    const marketingVaultContract = await tracked.deploy("Vault", "MarketingVaultContract", RESET);
+    await marketingVaultContract.initialize(Math.floor(Date.now() / 1000) + DAY * 90,  IfexToken.address);
+    console.log(`🚜 Deployed and Initialized Marketing Vault contract: ${marketingVaultContract.address}`);
+
+    const communityContract = await tracked.deploy("Vault", "CommunityVault", RESET);
+    await communityContract.initialize(Math.floor(Date.now() / 1000) + DAY * 90,  IfexToken.address);
+    console.log(`🚜 Deployed and Initialized Community Vault contract: ${communityContract.address}`);
+}
+
 const deploy = {
     tokenContracts,
     swapContracts,
     marginContracts,
     wrappedEtherContract,
     yieldFarmContract,
+    vaultContracts,
 }
 
 async function main() {
@@ -149,8 +170,9 @@ async function main() {
 
     // await deploy.tokenContracts();
     // await deploy.wrappedEtherContract();
-    await deploy.swapContracts();
-    await deploy.marginContracts();
+    // await deploy.swapContracts();
+    // await deploy.marginContracts();
+    await deploy.vaultContracts();
     // await deploy.yieldFarmContract();
 };
 
