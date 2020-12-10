@@ -6,7 +6,11 @@
 git clone https://github.com/International-Financial-Exchange/interfinex-smart-contracts
 cd interfinex-smart-contracts
 npm install
+```
 
+To compile:
+
+```
 sudo npx hardhat compile
 ```
 
