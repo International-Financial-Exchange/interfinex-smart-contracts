@@ -1,5 +1,7 @@
 # Interfinex Smart Contracts
 
+Documentation can be found here: https://interfinex.gitbook.io/interfinex/
+
 ## Getting Started
 
 ```
