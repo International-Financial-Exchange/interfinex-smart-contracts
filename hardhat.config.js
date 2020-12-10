@@ -1,6 +1,10 @@
 const { ethers } = require("ethers");
 const { task } = require("hardhat/config");
-const { privateKeys, projectDirs = [] } = require("./.env.json");
+require('dotenv').config();
+
+const projectDirs = JSON.parse(process.env.PROJECT_DIRS || []);
+
+console.log(projectDirs);
 
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-vyper");
@@ -21,18 +25,18 @@ module.exports = {
     networks: {
         ganache: {
             url: "http://localhost:7545",
-            accounts: [privateKeys.ganache]
+            accounts: [process.env.GANACHE_KEY]
         },
 
         kovan: {
             url: "https://kovan.infura.io/v3/f6a09cc8f51c45d2bd74137004115dbf",
-            accounts: [privateKeys.kovan],
+            accounts: [process.env.KOVAN_KEY],
             gasPrice: 1000000000,
         },
 
         mainnet: {
             url: "https://mainnet.infura.io/v3/f6a09cc8f51c45d2bd74137004115dbf",
-            accounts: [privateKeys.mainnet],
+            accounts: [process.env.MAINNET_KEY],
             gasPrice: 60000000000,
         }
     },
