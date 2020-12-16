@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { parseEther } = ethers.utils;
 
-describe("Factory contract", function() {
+describe("MarginFactory contract", function() {
     let marginFactoryContract, templateMarginMarketContract, templateDividendERC20Contract, ifexTokenContract;
     let token0, token1, token3, token4;
     let owner, addr1, addr2, addrs;

@@ -19,6 +19,12 @@ module.exports = {
         flat: true,
         allowExternalDir: true,
     },
+    sources: [
+        "./contracts/external",
+        "./contracts/ILO",
+        "./contracts/Swap",
+        "./contracts/Token",
+    ],
     networks: {
         ganache: {
             url: "http://localhost:7545",
