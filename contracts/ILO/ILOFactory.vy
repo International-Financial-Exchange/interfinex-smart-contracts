@@ -45,8 +45,11 @@ interface FixedPriceILO:
         _endDate: uint256,
         _softCap: uint256,
         _asset_swap_exchange: address,
+        _ifex_eth_swap_exchange: address,
         _percentage_to_lock: uint256,
         _wrapped_ether: address,
+        _ifex_token: address,
+        _liquidityUnlockDate: uint256,
         _creator: address,
     ): nonpayable
 
@@ -98,10 +101,14 @@ def createFixedPriceILO(
     _start_date: uint256,
     _end_date: uint256,
     _soft_cap: uint256,
-    _percentage_to_lock: uint256
+    _percentage_to_lock: uint256,
+    _liquidityUnlockDate: uint256,
 ):
     asset_swap_exchange: address = SwapFactory(self.swap_factory).pair_to_exchange(_asset_token, self.wrapped_ether)
     assert asset_swap_exchange != ZERO_ADDRESS, "Market does not exist"
+
+    ifex_eth_swap_exchange: address = SwapFactory(self.swap_factory).pair_to_exchange(_asset_token, self.ifex_token)
+    assert ifex_eth_swap_exchange != ZERO_ADDRESS, "IFEX asset market does not exist"
 
     ILOContract: address = create_forwarder_to(self.fixed_price_ILO_template)
     
@@ -119,8 +126,11 @@ def createFixedPriceILO(
         _end_date,
         _soft_cap,
         asset_swap_exchange,
+        ifex_eth_swap_exchange,
         _percentage_to_lock,
         self.wrapped_ether,
+        self.ifex_token,
+        _liquidityUnlockDate,
         msg.sender
     )
 

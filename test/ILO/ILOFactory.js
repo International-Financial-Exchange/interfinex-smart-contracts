@@ -106,7 +106,8 @@ describe("ILOFactory contract", function() {
             0,
             0,
             0,
-            30,
+            0,           
+            parseEther("0.3"),
         );
 
         expect(await iloFactoryContract.id_count()).to.be.equal(1);
