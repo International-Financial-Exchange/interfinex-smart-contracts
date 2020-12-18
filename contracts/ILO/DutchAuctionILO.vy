@@ -224,7 +224,7 @@ def invest():
 
     # Credit the investors balance with the tokens that they bought
     self.balanceOf[msg.sender] += assetTokensBought
-    self.etherDeposited[msg.sender] = investAmount
+    self.etherDeposited[msg.sender] += investAmount
 
     # Increase the global variables with the amount bought and invested
     self.etherAmountRaised += investAmount
@@ -239,18 +239,12 @@ def withdraw():
     assetTokensBought: uint256 = self.balanceOf[msg.sender]
     assert assetTokensBought > 0, "You did not purchase any tokens or have already withdrawn"
 
-    # Reset the user's balance
-    self.balanceOf[msg.sender] = 0
-
     # Send the user their purchased tokens
     self.safeTransfer(self.assetToken, msg.sender, assetTokensBought)
-
-    log Withdraw(msg.sender, assetTokensBought)
 
     if self.percentageToLock > 0:
         # Lock addidional liquidity in the swap pool proportional to the amount withdrawn
         etherToLock: uint256 = self.mulTruncate(self.etherDeposited[msg.sender], self.percentageToLock)
-        self.etherDeposited[msg.sender] = 0
         
         # Convert ether to wrapped ether
         WrappedEther(self.wrappedEther).deposit(value=etherToLock)
@@ -273,6 +267,12 @@ def withdraw():
             assetTokensToLock,
             0, MAX_UINT256, self, 0
         )
+
+    # Reset the user's balances
+    self.balanceOf[msg.sender] = 0
+    self.etherDeposited[msg.sender] = 0
+    
+    log Withdraw(msg.sender, assetTokensBought)
 
 hasCreatorWithdrawn: public(bool)
 

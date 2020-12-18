@@ -23,7 +23,7 @@ describe("DutchAuctionILO contract", function() {
         templateDividendERC20Contract = await DividendERC20.deploy();
 
         ifexTokenContract = await DividendERC20.deploy();
-        await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, parseEther("2100000000"), ifexTokenContract.address, false);
+        await ifexTokenContract.initializeERC20("Interfinex Bills", "IFEX", 18, 2_100_000_000, ifexTokenContract.address, false);
 
         const SwapExchange = await ethers.getContractFactory("SwapExchange");
         templateSwapExchangeContract = await SwapExchange.deploy();

@@ -211,7 +211,7 @@ def invest():
 
     # Credit the investors balance with the tokens that they bought
     self.balanceOf[msg.sender] += assetTokensBought
-    self.etherDeposited[msg.sender] = investAmount
+    self.etherDeposited[msg.sender] += investAmount
     self.totalAssetTokensBought += assetTokensBought
 
     log Invest(msg.sender, investAmount, assetTokensBought)
@@ -220,22 +220,21 @@ def invest():
 def withdraw():
     assert self._hasEnded() == True, "ILO has not ended yet"
 
+    assetTokensBought: uint256 = self.balanceOf[msg.sender]
+    etherInvested: uint256 = self.etherDeposited[msg.sender]
+    assert assetTokensBought > 0, "You did not purchase any tokens or have already withdrawn"
+
+    # Reset the user's balances
+    self.balanceOf[msg.sender] = 0
+    self.etherDeposited[msg.sender] = 0
+
     if self._hasReachedSoftCap() == True:
-        assetTokensBought: uint256 = self.balanceOf[msg.sender]
-        assert assetTokensBought > 0, "You did not purchase any tokens or have already withdrawn"
-
-        # Reset the user's balance
-        self.balanceOf[msg.sender] = 0
-
         # Send the user their purchased tokens
         self.safeTransfer(self.assetToken, msg.sender, assetTokensBought)
 
-        log Withdraw(msg.sender, assetTokensBought)
-
         if self.percentageToLock > 0:
             # Lock addidional liquidity in the swap pool proportional to the amount withdrawn
-            etherToLock: uint256 = self.mulTruncate(self.etherDeposited[msg.sender], self.percentageToLock)
-            self.etherDeposited[msg.sender] = 0
+            etherToLock: uint256 = self.mulTruncate(etherInvested, self.percentageToLock)
             
             # Convert ether to wrapped ether
             WrappedEther(self.wrappedEther).deposit(value=etherToLock)
@@ -258,11 +257,10 @@ def withdraw():
                 assetTokensToLock,
                 0, MAX_UINT256, self, 0
             )
+            
+            log Withdraw(msg.sender, assetTokensBought)
     else:
         # Send invested amount back to the sender if softCap has not been reached
-        etherInvested: uint256 = self.etherDeposited[msg.sender]
-        self.etherDeposited[msg.sender] = 0
-        self.balanceOf[msg.sender] = 0
         send(msg.sender, etherInvested)
 
 hasCreatorWithdrawn: public(bool)
