@@ -66,4 +66,16 @@ describe("Vault contract", function() {
 
         await expect(vaultContract.connect(addr1).withdraw()).to.be.revertedWith("Not owner!");
     });
+
+    it("Should change owner", async function() {
+        await expect(vaultContract.connect(addr1).changeOwner(addr1.address)).to.be.revertedWith("Not owner!");
+        await vaultContract.changeOwner(addr1.address);
+        await vaultContract.connect(addr1).changeOwner(addr1.address);
+        await expect(vaultContract.connect(owner).changeOwner(addr1.address)).to.be.revertedWith("Not owner!");
+
+        await ethers.provider.send("evm_increaseTime", [DAY * 2]);
+        await ethers.provider.send("evm_mine");
+
+        await vaultContract.connect(addr1).withdraw();
+    });
 });
