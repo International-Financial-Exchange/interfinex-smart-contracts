@@ -92,6 +92,15 @@ interface ERC20:
 interface DividendERC20:
     def distributeDividends(_value: uint256): nonpayable
 
+event Invest: 
+    user: indexed(address)
+    investAmount: uint256
+    assetTokensBought: uint256
+
+event Withdraw:
+    user: indexed(address)
+    assetTokensBought: uint256
+
 assetToken: public(address)
 assetTokenAmount: public(uint256)
 tokensPerEth: public(uint256)    
@@ -192,13 +201,20 @@ def invest():
     investAmount: uint256 = msg.value
     assetTokensBought: uint256 = self.mulTruncate(msg.value, self.tokensPerEth)
 
-    # Check that there are enough tokens left
-    self.totalAssetTokensBought += assetTokensBought
-    assert self.totalAssetTokensBought <= self.assetTokenAmount, "Not enough tokens to sell" 
+    # Check that there are enough tokens left - If there aren't then give the max amount
+    if self.totalAssetTokensBought + assetTokensBought > self.assetTokenAmount:
+        # Give the investor the max amount that they can buy
+        assetTokensBought = self.assetTokenAmount - self.totalAssetTokensBought
+        investAmount = assetTokensBought * ONE / self.tokensPerEth
+        # Refund the surplus ether amount
+        send(msg.sender, msg.value - investAmount)
 
     # Credit the investors balance with the tokens that they bought
     self.balanceOf[msg.sender] += assetTokensBought
     self.etherDeposited[msg.sender] = investAmount
+    self.totalAssetTokensBought += assetTokensBought
+
+    log Invest(msg.sender, investAmount, assetTokensBought)
 
 @external
 def withdraw():
@@ -214,6 +230,8 @@ def withdraw():
         # Send the user their purchased tokens
         self.safeTransfer(self.assetToken, msg.sender, assetTokensBought)
 
+        log Withdraw(msg.sender, assetTokensBought)
+
         if self.percentageToLock > 0:
             # Lock addidional liquidity in the swap pool proportional to the amount withdrawn
             etherToLock: uint256 = self.mulTruncate(self.etherDeposited[msg.sender], self.percentageToLock)
@@ -222,7 +240,7 @@ def withdraw():
             # Convert ether to wrapped ether
             WrappedEther(self.wrappedEther).deposit(value=etherToLock)
             
-            # Convert max amount of ether to assetTokens
+            # Convert max amount of ether to assetTokens such that 100% of funds can be deposited as liquidity using the new price
             # Using the below formula:
             # https://www.wolframalpha.com/input/?i=%28+x+%28a%2F%28b%2Bx%29%29%29%2F%28z-x%29+%3D+%28a-x%28a%2F%28b%2Bx%29%29%29%2F%28b%2Bx%29%2C+solve+for+x
             exchangeEtherBalance: uint256 = ERC20(self.wrappedEther).balanceOf(self.assetSwapExchange)

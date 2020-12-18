@@ -171,12 +171,12 @@ describe("FixedPriceILO contract", function() {
             ).to.be.revertedWith("ILO has ended");
         });
 
-        it("Should not invest more than contract can sell", async function() {
+        it("Should invest and refund surplus", async function() {
             const ethHardCap = assetTokenAmount.div(tokensPerEth);
 
-            await expect(
-                fixedPriceIlocontract.invest({ value: parseEther(ethHardCap.add(1).toString()) }),
-            ).to.be.revertedWith("Not enough tokens to sell");
+            await fixedPriceIlocontract.invest({ value: parseEther(ethHardCap.add(1).toString()) });
+            expect(await ethers.provider.getBalance(fixedPriceIlocontract.address)).to.be.equal(parseEther(ethHardCap.toString()));
+            expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(true);
         });
 
         it("Should withdraw and add liquidity", async function() {

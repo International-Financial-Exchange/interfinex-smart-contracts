@@ -92,6 +92,16 @@ interface ERC20:
 interface DividendERC20:
     def distributeDividends(_value: uint256): nonpayable
 
+event Invest: 
+    user: indexed(address)
+    investAmount: uint256
+    assetTokensBought: uint256
+    tokensPerEth: uint256
+
+event Withdraw:
+    user: indexed(address)
+    assetTokensBought: uint256
+
 assetToken: public(address)
 assetTokenAmount: public(uint256)
 startTokensPerEth: public(uint256)
@@ -215,8 +225,12 @@ def invest():
     # Credit the investors balance with the tokens that they bought
     self.balanceOf[msg.sender] += assetTokensBought
     self.etherDeposited[msg.sender] = investAmount
+
+    # Increase the global variables with the amount bought and invested
     self.etherAmountRaised += investAmount
     self.totalAssetTokensBought += assetTokensBought
+
+    log Invest(msg.sender, investAmount, assetTokensBought, tokensPerEth)
 
 @external
 def withdraw():
@@ -230,6 +244,8 @@ def withdraw():
 
     # Send the user their purchased tokens
     self.safeTransfer(self.assetToken, msg.sender, assetTokensBought)
+
+    log Withdraw(msg.sender, assetTokensBought)
 
     if self.percentageToLock > 0:
         # Lock addidional liquidity in the swap pool proportional to the amount withdrawn

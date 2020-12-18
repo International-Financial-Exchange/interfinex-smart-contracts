@@ -53,6 +53,23 @@ interface FixedPriceILO:
         _creator: address,
     ): nonpayable
 
+interface DutchAuctionILO:
+    def initialize(
+        _assetToken: address, 
+        _assetTokenAmount: uint256, 
+        _startTokensPerEth: uint256,
+        _endTokensPerEth: uint256,
+        _startDate: uint256,
+        _endDate: uint256,
+        _assetSwapExchange: address,
+        _ifexEthSwapExchange: address,
+        _percentageToLock: uint256,
+        _wrappedEther: address,
+        _ifexToken: address,
+        _liquidityUnlockDate: uint256,
+        _creator: address
+    ): nonpayable
+
 interface SwapFactory: 
     def pair_to_exchange(token0: address, token1: address) -> address: view
 
@@ -69,12 +86,14 @@ dividend_erc20_template: public(address)
 ifex_token: public(address)
 swap_factory: public(address)
 fixed_price_ILO_template: public(address)
+dutch_auction_ILO_template: public(address)
 wrapped_ether: public(address)
 owner: public(address)
 
 is_initialized: public(bool)
 
 FIXED_PRICE_ILO: constant(uint256) = 1
+DUTCH_AUCTION_ILO: constant(uint256) = 2
 
 @external
 def initialize(
@@ -82,6 +101,7 @@ def initialize(
     _ifex_token: address,
     _swap_factory: address,
     _fixed_price_ILO_template: address,
+    _dutch_auction_ILO_template: address,
     _wrapped_ether: address,
 ):
     assert self.is_initialized == False, "Factory already initialized"
@@ -91,6 +111,7 @@ def initialize(
     self.ifex_token = _ifex_token
     self.swap_factory = _swap_factory
     self.fixed_price_ILO_template = _fixed_price_ILO_template
+    self.dutch_auction_ILO_template = _dutch_auction_ILO_template
     self.wrapped_ether = _wrapped_ether
 
 @external
@@ -135,4 +156,47 @@ def createFixedPriceILO(
     )
 
     log NewILO(msg.sender, _asset_token, FIXED_PRICE_ILO, ILOContract)
+
+@external
+def createDutchAuctionILO(
+    _asset_token: address,
+    _asset_token_amount: uint256,
+    _start_tokens_per_eth: uint256, 
+    _end_tokens_per_eth: uint256, 
+    _start_date: uint256,
+    _end_date: uint256,
+    _percentage_to_lock: uint256,
+    _liquidityUnlockDate: uint256,
+):
+    asset_swap_exchange: address = SwapFactory(self.swap_factory).pair_to_exchange(_asset_token, self.wrapped_ether)
+    assert asset_swap_exchange != ZERO_ADDRESS, "Market does not exist"
+
+    ifex_eth_swap_exchange: address = SwapFactory(self.swap_factory).pair_to_exchange(_asset_token, self.ifex_token)
+    assert ifex_eth_swap_exchange != ZERO_ADDRESS, "IFEX asset market does not exist"
+
+    ILOContract: address = create_forwarder_to(self.dutch_auction_ILO_template)
+    
+    self.id_count += 1
+    self.id_to_ILO[self.id_count] = ILOContract
+
+    self.safeTransferFrom(_asset_token, msg.sender, self, _asset_token_amount)
+    self.safeApprove(_asset_token, ILOContract, MAX_UINT256)
+
+    DutchAuctionILO(ILOContract).initialize(
+        _asset_token,
+        _asset_token_amount,
+        _start_tokens_per_eth,
+        _end_tokens_per_eth,
+        _start_date,
+        _end_date,
+        asset_swap_exchange,
+        ifex_eth_swap_exchange,
+        _percentage_to_lock,
+        self.wrapped_ether,
+        self.ifex_token,
+        _liquidityUnlockDate,
+        msg.sender
+    )
+
+    log NewILO(msg.sender, _asset_token, DUTCH_AUCTION_ILO, ILOContract)
 

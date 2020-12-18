@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { parseEther } = ethers.utils;
 
-describe("FixedPriceILO contract", function() {
+describe("DutchAuctionILO contract", function() {
     let iloFactoryContract, liquidityTokenContract, ifexEthSwapExchangeContract, assetSwapExchangeContract, templateFixedPriceIloContract, templateSwapExchangeContract, wrappedEtherContract, swapFactoryContract, templateDividendERC20Contract, ifexTokenContract;
     let token0, token1, token3, token4;
     let owner, addr1, addr2, addrs;
@@ -81,7 +81,7 @@ describe("FixedPriceILO contract", function() {
         templateFixedPriceIloContract = await FixedPriceILO.deploy();
     });
 
-    describe("No start date, end date, or soft cap", function() {
+    describe("Functionality", function() {
         let fixedPriceIlocontract;
         const assetTokenAmount = parseEther("100");
         const startTokensPerEth = parseEther("1");
@@ -161,225 +161,164 @@ describe("FixedPriceILO contract", function() {
             expect(await dutchAuctionIloContract.etherDeposited(owner.address)).to.be.equal(depositAmount);
         });
 
-        // it("Should hit hardcap and end ILO", async function() {
-        //     const ethHardCap = assetTokenAmount.div(tokensPerEth);
+        it("Should invest with surplus amount", async function() {
+            await ethers.provider.send("evm_increaseTime", [DAY * 1]);
+            await ethers.provider.send("evm_mine");
 
-        //     await fixedPriceIlocontract.invest({ value: parseEther(ethHardCap.div(2).toString()) });
-        //     expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(false);
+            const investAmount = (await ethers.provider.getBalance(owner.address)).div(2);
+            await dutchAuctionIloContract.invest({ value: investAmount });
+            expect(await dutchAuctionIloContract.hasEnded()).to.be.equal(true);
 
-        //     await fixedPriceIlocontract.invest({ value: parseEther(ethHardCap.div(2).toString()) });
-        //     expect(await fixedPriceIlocontract.totalAssetTokensBought()).to.be.equal(
-        //         await fixedPriceIlocontract.assetTokenAmount()
-        //     );
-        //     expect(await fixedPriceIlocontract.totalAssetTokensBought()).to.be.equal(assetTokenAmount);
-        //     expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(true);
+            expect(await dutchAuctionIloContract.totalAssetTokensBought()).to.be.equal(
+                await dutchAuctionIloContract.assetTokenAmount()
+            );
 
-        //     await expect(
-        //         fixedPriceIlocontract.invest({ value: parseEther(ethHardCap.div(2).toString()) })
-        //     ).to.be.revertedWith("ILO has ended");
-        // });
+            expect(await ethers.provider.getBalance(owner.address)).to.be.gt(investAmount);
+            expect(await ethers.provider.getBalance(dutchAuctionIloContract.address)).to.be.lt(investAmount);
 
-        // it("Should not invest more than contract can sell", async function() {
-        //     const ethHardCap = assetTokenAmount.div(tokensPerEth);
+            await expect(
+                dutchAuctionIloContract.invest({ value: parseEther("1") })
+            ).to.be.revertedWith("ILO has ended");
+        });
 
-        //     await expect(
-        //         fixedPriceIlocontract.invest({ value: parseEther(ethHardCap.add(1).toString()) }),
-        //     ).to.be.revertedWith("Not enough tokens to sell");
-        // });
+        it("Should withdraw owner funds", async function() {
+            await ethers.provider.send("evm_increaseTime", [DAY * 1]);
+            await ethers.provider.send("evm_mine");
 
-        // it("Should withdraw and add liquidity", async function() {
-        //     const ethHardCap = assetTokenAmount.div(tokensPerEth);
-        //     const ownerBalanceBefore = await token0.balanceOf(owner.address);
+            const ownerBalanceBefore = await token0.balanceOf(owner.address);
 
-        //     await fixedPriceIlocontract.invest({ value: parseEther(ethHardCap.toString()) });
-        //     expect(await wrappedEtherContract.balanceOf(fixedPriceIlocontract.address)).to.be.equal(0);
-        //     await fixedPriceIlocontract.withdraw();
+            await dutchAuctionIloContract.invest({ value: parseEther("1000") });
+            expect(await wrappedEtherContract.balanceOf(dutchAuctionIloContract.address)).to.be.equal(0);
+            await dutchAuctionIloContract.withdraw();
 
-        //     expect(await token0.balanceOf(owner.address)).to.be.equal(ownerBalanceBefore.add(assetTokenAmount));
-        //     expect(await liquidityTokenContract.balanceOf(fixedPriceIlocontract.address)).to.not.equal(0);
+            expect(await token0.balanceOf(owner.address)).to.be.equal(ownerBalanceBefore.add(assetTokenAmount));
+            expect(await liquidityTokenContract.balanceOf(dutchAuctionIloContract.address)).to.not.equal(0);
 
-        //     expect(await ethers.provider.getBalance(fixedPriceIlocontract.address)).to.be.equal(
-        //         assetTokenAmount
-        //             .mul(parseEther("1"))
-        //             .div(tokensPerEth)
-        //             .mul(parseEther("1").sub(percentageToLock))
-        //             .div(parseEther("1"))
-        //     );
+            expect(await dutchAuctionIloContract.hasEnded()).to.be.equal(true);
 
-        //     expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(true);
+            const addr1EthBalanceBefore = await ethers.provider.getBalance(addr1.address);
+            await dutchAuctionIloContract.ownerWithdrawFunds(addr1.address);
+            expect(await ethers.provider.getBalance(addr1.address)).to.be.equal(
+                addr1EthBalanceBefore.add(
+                    (await dutchAuctionIloContract.etherAmountRaised())
+                        .mul(parseEther("1").sub(percentageToLock))
+                        .div(parseEther("1"))
+                        .mul(990)
+                        .div(1000)
+                )
+            );
 
-        //     const addr1EthBalanceBefore = await ethers.provider.getBalance(addr1.address);
-        //     await fixedPriceIlocontract.ownerWithdrawFunds(addr1.address);
-        //     expect(await ethers.provider.getBalance(addr1.address)).to.be.equal(
-        //         addr1EthBalanceBefore.add(
-        //             (await fixedPriceIlocontract.totalAssetTokensBought())
-        //                 .mul(parseEther("1"))
-        //                 .div(tokensPerEth)
-        //                 .mul(parseEther("1").sub(percentageToLock))
-        //                 .div(parseEther("1"))
-        //                 .mul(990)
-        //                 .div(1000)
-        //         )
-        //     );
-
-        //     await expect(fixedPriceIlocontract.ownerWithdrawFunds(addr1.address)).to.be.revertedWith("You have already withdrawn");
-
-        //     await fixedPriceIlocontract.ownerWithdrawLiquidity(addr1.address);
-        //     const addr1LiquidityTokenBalance = await liquidityTokenContract.balanceOf(addr1.address);
-        //     expect(addr1LiquidityTokenBalance).to.not.equal(0);
-
-        //     await fixedPriceIlocontract.ownerWithdrawLiquidity(addr1.address);
-        //     expect(await liquidityTokenContract.balanceOf(addr1.address)).to.be.equal(addr1LiquidityTokenBalance);
-        // });
+            await expect(dutchAuctionIloContract.ownerWithdrawFunds(addr1.address)).to.be.revertedWith("You have already withdrawn");
+        });
     });
 
-    // describe("With start date, end date, and soft cap", function() {
-    //     let fixedPriceIlocontract;
-    //     const assetTokenAmount = parseEther("100");
-    //     const tokensPerEth = parseEther("5");
-    //     const percentageToLock = parseEther("0.3");
-    //     const softCap = parseEther("10");
-    //     const DAY =  60 * 60 * 24;
-    //     beforeEach(async function() {
-    //         const FixedPriceILO = await ethers.getContractFactory("FixedPriceILO");
-    //         fixedPriceIlocontract = await FixedPriceILO.deploy();
+    describe("Security", function() {
+        let fixedPriceIlocontract;
+        const assetTokenAmount = parseEther("100");
+        const startTokensPerEth = parseEther("1");
+        const endTokensPerEth = parseEther("50");
+        const percentageToLock = parseEther("0.3");
+        let startDate, endDate, liquidityUnlockDate;
+        const DAY = 60 * 60 * 24;
+        beforeEach(async function() {
+            const DutchAuctionILO = await ethers.getContractFactory("DutchAuctionILO");
+            dutchAuctionIloContract = await DutchAuctionILO.deploy();
 
-    //         await token0.approve(fixedPriceIlocontract.address, ethers.constants.MaxUint256);
-    //         const blockTime = (await ethers.provider.getBlock()).timestamp;
-    //         await fixedPriceIlocontract.initialize(
-    //             token0.address,
-    //             assetTokenAmount,
-    //             tokensPerEth,
-    //             blockTime + DAY,
-    //             blockTime + DAY * 3,
-    //             softCap,
-    //             assetSwapExchangeContract.address,
-    //             ifexEthSwapExchangeContract.address,
-    //             percentageToLock,
-    //             wrappedEtherContract.address,
-    //             ifexTokenContract.address,
-    //             blockTime + DAY * 20,
-    //             owner.address,
-    //         );
-    //     });
+            const blockTime = (await ethers.provider.getBlock()).timestamp;
+            startDate = blockTime + DAY;
+            endDate = blockTime + DAY * 3;
+            liquidityUnlockDate = blockTime + DAY * 20;
 
-    //     it("Should not start before startDate", async function() {
-    //         const etherDeposit = parseEther("1");
+            await token0.approve(dutchAuctionIloContract.address, ethers.constants.MaxUint256);
+            await dutchAuctionIloContract.initialize(
+                token0.address,
+                assetTokenAmount,
+                startTokensPerEth,
+                endTokensPerEth,   
+                startDate,
+                endDate,
+                assetSwapExchangeContract.address,
+                ifexEthSwapExchangeContract.address,
+                percentageToLock,
+                wrappedEtherContract.address,
+                ifexTokenContract.address,
+                liquidityUnlockDate,
+                owner.address,
+            );
+        });
 
-    //         await expect(fixedPriceIlocontract.invest({ value: etherDeposit })).to.be.revertedWith("ILO has not started yet");
+        it("Should not start before startDate", async function() {
+            const etherDeposit = parseEther("1");
 
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 0.95]);
-    //         await ethers.provider.send("evm_mine");
+            await expect(dutchAuctionIloContract.invest({ value: etherDeposit })).to.be.revertedWith("ILO has not started yet");
 
-    //         await expect(fixedPriceIlocontract.invest({ value: etherDeposit })).to.be.revertedWith("ILO has not started yet");
+            await ethers.provider.send("evm_increaseTime", [DAY * 0.95]);
+            await ethers.provider.send("evm_mine");
 
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 0.1]);
-    //         await ethers.provider.send("evm_mine");
+            await expect(dutchAuctionIloContract.invest({ value: etherDeposit })).to.be.revertedWith("ILO has not started yet");
 
-    //         await fixedPriceIlocontract.invest({ value: etherDeposit });
-    //     });
+            await ethers.provider.send("evm_increaseTime", [DAY * 0.1]);
+            await ethers.provider.send("evm_mine");
 
-    //     it("Should end with endDate", async function() {
-    //         const etherDeposit = parseEther("1");
+            await dutchAuctionIloContract.invest({ value: etherDeposit });
+        });
 
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 2.95]);
-    //         await ethers.provider.send("evm_mine");
+        it("Should end with endDate", async function() {
+            const etherDeposit = parseEther("1");
 
-    //         expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(false);
+            await ethers.provider.send("evm_increaseTime", [DAY * 2.95]);
+            await ethers.provider.send("evm_mine");
 
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 0.06]);
-    //         await ethers.provider.send("evm_mine");
+            expect(await dutchAuctionIloContract.hasEnded()).to.be.equal(false);
 
-    //         expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(true);
+            await ethers.provider.send("evm_increaseTime", [DAY * 0.06]);
+            await ethers.provider.send("evm_mine");
 
-    //         expect(await fixedPriceIlocontract.hasReachedSoftCap()).to.be.equal(false);
-    //     });
+            expect(await dutchAuctionIloContract.hasEnded()).to.be.equal(true);
+        });
 
-    //     it("Should reach softCap", async function() {
-    //         const etherDeposit = parseEther("1");
+        it("Should lock liquidity", async function() {
+            const etherDeposit = parseEther("1000");
 
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 1]);
-    //         await ethers.provider.send("evm_mine");
+            await ethers.provider.send("evm_increaseTime", [DAY * 1]);
+            await ethers.provider.send("evm_mine");
 
-    //         await fixedPriceIlocontract.invest({ value: etherDeposit });
+            await dutchAuctionIloContract.invest({ value: etherDeposit });
 
-    //         expect(await fixedPriceIlocontract.hasReachedSoftCap()).to.be.equal(false);
+            expect(await dutchAuctionIloContract.hasEnded()).to.be.equal(true);
 
-    //         await fixedPriceIlocontract.invest({ value: etherDeposit.mul(10) });
+            await expect(dutchAuctionIloContract.ownerWithdrawLiquidity(addr1.address)).to.be.revertedWith("Liquidity is still locked");
 
-    //         expect(await fixedPriceIlocontract.hasReachedSoftCap()).to.be.equal(true);
-    //     });
+            await ethers.provider.send("evm_increaseTime", [DAY * 20]);
+            await ethers.provider.send("evm_mine");
 
-    //     it("Should not reach softCap then refund investors", async function() {
-    //         const etherDeposit = parseEther("1");
+            await dutchAuctionIloContract.withdraw();
 
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 1]);
-    //         await ethers.provider.send("evm_mine");
+            await dutchAuctionIloContract.ownerWithdrawLiquidity(addr1.address);
+            expect(await liquidityTokenContract.balanceOf(addr1.address)).to.be.gt(1);
+            expect(await liquidityTokenContract.balanceOf(dutchAuctionIloContract.address)).to.be.equal(0);
+        });
 
-    //         await fixedPriceIlocontract.invest({ value: etherDeposit });
+        it("Should distribute ifex rewards after owner withdraw", async function() {
+            const etherDeposit = parseEther("500");
 
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 3]);
-    //         await ethers.provider.send("evm_mine");
+            await ethers.provider.send("evm_increaseTime", [DAY * 1]);
+            await ethers.provider.send("evm_mine");
 
-    //         expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(true);
-    //         expect(await fixedPriceIlocontract.hasReachedSoftCap()).to.be.equal(false);
+            await dutchAuctionIloContract.invest({ value: etherDeposit });
 
-    //         expect(await fixedPriceIlocontract.etherDeposited(owner.address)).to.be.equal(etherDeposit);
-    //         await fixedPriceIlocontract.withdraw();
+            expect(await dutchAuctionIloContract.hasEnded()).to.be.equal(true);
 
-    //         expect(await fixedPriceIlocontract.etherDeposited(owner.address)).to.be.equal(0);
+            const ifexDividendsBefore = await ifexTokenContract.balanceOf(ifexTokenContract.address);
+            expect(ifexDividendsBefore).to.be.equal(0);
+            await dutchAuctionIloContract.ownerWithdrawFunds(addr1.address);
 
-    //         const ownerBalanceBefore = await token0.balanceOf(owner.address);
-    //         await fixedPriceIlocontract.ownerWithdrawFunds(owner.address);
-    //         expect(await token0.balanceOf(owner.address)).to.be.equal(
-    //             ownerBalanceBefore.add(
-    //                 assetTokenAmount
-    //             )
-    //         );
-    //     });
+            expect(await ifexTokenContract.balanceOf(ifexTokenContract.address)).to.be.gt(0);
 
-    //     it("Should lock liquidity", async function() {
-    //         const etherDeposit = parseEther("20");
+            expect(await ifexTokenContract.totalTokenDividends()).to.be.equal(0);
+            await ifexTokenContract.distributeExcessBalance();
 
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 1]);
-    //         await ethers.provider.send("evm_mine");
-
-    //         await fixedPriceIlocontract.invest({ value: etherDeposit });
-
-    //         expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(true);
-
-    //         await expect(fixedPriceIlocontract.ownerWithdrawLiquidity(addr1.address)).to.be.revertedWith("Liquidity is still locked");
-
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 20]);
-    //         await ethers.provider.send("evm_mine");
-
-    //         await fixedPriceIlocontract.withdraw();
-
-    //         await fixedPriceIlocontract.ownerWithdrawLiquidity(addr1.address);
-    //         expect(await liquidityTokenContract.balanceOf(addr1.address)).to.be.gt(1);
-    //         expect(await liquidityTokenContract.balanceOf(fixedPriceIlocontract.address)).to.be.equal(0);
-    //     });
-
-    //     it("Should distribute ifex rewards after owner withdraw", async function() {
-    //         const etherDeposit = parseEther("20");
-
-    //         await ethers.provider.send("evm_increaseTime", [DAY * 1]);
-    //         await ethers.provider.send("evm_mine");
-
-    //         await fixedPriceIlocontract.invest({ value: etherDeposit });
-
-    //         expect(await fixedPriceIlocontract.hasEnded()).to.be.equal(true);
-
-    //         const ifexDividendsBefore = await ifexTokenContract.balanceOf(ifexTokenContract.address);
-    //         expect(ifexDividendsBefore).to.be.equal(0);
-    //         await fixedPriceIlocontract.ownerWithdrawFunds(addr1.address);
-
-    //         expect(await ifexTokenContract.balanceOf(ifexTokenContract.address)).to.be.gt(0);
-
-    //         expect(await ifexTokenContract.totalTokenDividends()).to.be.equal(0);
-    //         await ifexTokenContract.distributeExcessBalance();
-
-    //         expect(await ifexTokenContract.totalTokenDividends()).to.be.gt(0);
-    //     });
-    // });
+            expect(await ifexTokenContract.totalTokenDividends()).to.be.gt(0);
+        });
+    });
 });

@@ -65,6 +65,9 @@ describe("ILOFactory contract", function() {
         const FixedPriceILO = await ethers.getContractFactory("FixedPriceILO");
         templateFixedPriceIloContract = await FixedPriceILO.deploy();
 
+        const DutchAuctionILO = await ethers.getContractFactory("DutchAuctionILO");
+        templateDutchAuctionILOContract = await DutchAuctionILO.deploy();
+
         const ILOFactory = await ethers.getContractFactory("ILOFactory");
         iloFactoryContract = await ILOFactory.deploy();
 
@@ -73,6 +76,7 @@ describe("ILOFactory contract", function() {
             ifexTokenContract.address,
             swapFactoryContract.address,
             templateFixedPriceIloContract.address,
+            templateDutchAuctionILOContract.address,
             wrappedEtherContract.address,
         );
     });
@@ -92,6 +96,7 @@ describe("ILOFactory contract", function() {
                 ifexTokenContract.address,
                 swapFactoryContract.address,
                 templateFixedPriceIloContract.address,
+                templateDutchAuctionILOContract.address,
                 wrappedEtherContract.address,
             )
         ).to.be.revertedWith("Factory already initialized");
@@ -106,8 +111,8 @@ describe("ILOFactory contract", function() {
             0,
             0,
             0,
-            0,           
             parseEther("0.3"),
+            0,           
         );
 
         expect(await iloFactoryContract.id_count()).to.be.equal(1);
@@ -115,5 +120,25 @@ describe("ILOFactory contract", function() {
         const fixedPricedILOContract = await iloFactoryContract.id_to_ILO(1);
         expect(fixedPricedILOContract).to.not.equal(ethers.constants.AddressZero);
         expect(await token0.balanceOf(fixedPricedILOContract)).to.be.equal(parseEther("100"));
+    });
+
+    it("Should create DutchAuctionILO contract", async function() {
+        await token0.approve(iloFactoryContract.address, ethers.constants.MaxUint256);
+        await iloFactoryContract.createDutchAuctionILO(
+            token0.address,
+            parseEther("100"),
+            parseEther("5"),
+            parseEther("10"),
+            0,
+            0,
+            parseEther("0.3"),
+            0,           
+        );
+
+        expect(await iloFactoryContract.id_count()).to.be.equal(1);
+
+        const dutchAuctionIloContract = await iloFactoryContract.id_to_ILO(1);
+        expect(dutchAuctionIloContract).to.not.equal(ethers.constants.AddressZero);
+        expect(await token0.balanceOf(dutchAuctionIloContract)).to.be.equal(parseEther("100"));
     });
 });
